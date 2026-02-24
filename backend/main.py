@@ -20,7 +20,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-import ccxt
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -289,16 +288,65 @@ def get_latest_signal(user_id: str):
 
 @app.get("/api/ohlcv")
 def get_ohlcv(symbol: str = "BTC/USDT", timeframe: str = "4h", limit: int = 500):
+    """
+    Fetches OHLCV candles from Hyperliquid's public API.
+    Hyperliquid has no geo-restrictions and is the exchange the bot actually trades on.
+    """
+    import time
+    import urllib.request as urlreq
+
+    # Extract coin name from symbol (BTC/USDT → BTC)
+    coin = symbol.split("/")[0]
+
+    # Map timeframe to Hyperliquid interval string
+    hl_interval = {
+        "1m": "1m", "5m": "5m", "15m": "15m", "30m": "30m",
+        "1h": "1h", "4h": "4h", "1d": "1d",
+    }.get(timeframe, "4h")
+
+    # Calculate time window
+    interval_ms = {
+        "1m": 60_000,      "5m": 300_000,    "15m": 900_000,
+        "30m": 1_800_000,  "1h": 3_600_000,  "4h": 14_400_000,
+        "1d": 86_400_000,
+    }.get(timeframe, 14_400_000)
+
+    end_ms   = int(time.time() * 1000)
+    start_ms = end_ms - limit * interval_ms
+
+    payload = json.dumps({
+        "type": "candleSnapshot",
+        "req": {
+            "coin":      coin,
+            "interval":  hl_interval,
+            "startTime": start_ms,
+            "endTime":   end_ms,
+        }
+    }).encode()
+
     try:
-        exchange = ccxt.binance({"enableRateLimit": True})
-        raw = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+        req = urlreq.Request(
+            "https://api.hyperliquid.xyz/info",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urlreq.urlopen(req, timeout=15) as resp:
+            raw = json.loads(resp.read())
+
         return [
-            {"time": int(c[0] / 1000), "open": c[1], "high": c[2],
-             "low": c[3], "close": c[4], "volume": c[5]}
+            {
+                "time":   int(c["t"] / 1000),
+                "open":   float(c["o"]),
+                "high":   float(c["h"]),
+                "low":    float(c["l"]),
+                "close":  float(c["c"]),
+                "volume": float(c["v"]),
+            }
             for c in raw
         ]
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise HTTPException(500, f"Hyperliquid OHLCV error: {e}")
 
 
 # ── Paper trade manual entry ───────────────────────────────────────────────────
