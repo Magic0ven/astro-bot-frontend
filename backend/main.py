@@ -8,7 +8,10 @@ Start:
 import asyncio
 import json
 import os
+import re
+import shlex
 import sqlite3
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -19,8 +22,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-BOT_DIR    = Path(os.getenv("BOT_DIR", "/Users/akagami/astro-bot"))
-USERS_FILE = Path(__file__).parent / "users.json"
+BOT_DIR          = Path(os.getenv("BOT_DIR", "/Users/akagami/astro-bot"))
+USERS_FILE       = Path(__file__).parent / "users.json"
+PROVISION_SCRIPT = Path(__file__).parent.parent / "provision_user.sh"
 
 app = FastAPI(title="Astro-Bot Dashboard API", version="1.0.0")
 app.add_middleware(
@@ -212,6 +216,88 @@ def close_paper_trade(user_id: str, index: int):
     removed = positions.pop(index)
     positions_path.write_text(json.dumps(positions, indent=2))
     return {"status": "ok", "removed": removed}
+
+
+# ── User provisioning ─────────────────────────────────────────────────────────
+class RegisterUserIn(BaseModel):
+    username:     str    # Linux username / unique ID  (alphanumeric + dash)
+    display_name: str    # Human-readable label shown in the dashboard
+    wallet:       str    # Hyperliquid wallet address  0x...
+    private_key:  str    # Hyperliquid agent wallet private key  0x...
+
+
+@app.post("/api/users/register")
+def register_user(body: RegisterUserIn):
+    # Validate username is safe (alphanumeric + hyphen only)
+    if not re.fullmatch(r"[a-z0-9\-]{2,32}", body.username):
+        raise HTTPException(400, "username must be 2-32 lowercase alphanumeric / hyphen chars")
+
+    # Check provision script exists
+    if not PROVISION_SCRIPT.exists():
+        raise HTTPException(500, f"provision_user.sh not found at {PROVISION_SCRIPT}")
+
+    cmd = [
+        "sudo", str(PROVISION_SCRIPT),
+        body.username,
+        body.wallet,
+        body.private_key,
+        body.display_name,
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,      # 2 min max — pip install can be slow
+        )
+    except subprocess.TimeoutExpired:
+        raise HTTPException(504, "Provisioning timed out after 120 s")
+
+    if result.returncode != 0:
+        raise HTTPException(500, f"Provisioning failed:\n{result.stderr}")
+
+    # Return the newly created user entry from users.json
+    users = load_users()
+    user  = next((u for u in users if u["id"] == body.username), None)
+    return {
+        "status": "ok",
+        "user":   user,
+        "log":    result.stdout[-2000:],   # last 2 kb of script output
+    }
+
+
+@app.delete("/api/users/{user_id}")
+def remove_user(user_id: str, stop_service: bool = True):
+    """Remove a user from users.json (optionally stop their systemd service)."""
+    users = load_users()
+    target = next((u for u in users if u["id"] == user_id), None)
+    if not target:
+        raise HTTPException(404, f"User '{user_id}' not found")
+
+    if stop_service:
+        service = f"astrobot-{user_id}"
+        subprocess.run(["sudo", "systemctl", "stop",    service], capture_output=True)
+        subprocess.run(["sudo", "systemctl", "disable", service], capture_output=True)
+
+    updated = [u for u in users if u["id"] != user_id]
+    USERS_FILE.write_text(json.dumps(updated, indent=2))
+    return {"status": "ok", "removed": target}
+
+
+@app.get("/api/users/{user_id}/service-status")
+def service_status(user_id: str):
+    """Return systemd active/inactive status for a bot instance."""
+    service = f"astrobot-{user_id}"
+    result  = subprocess.run(
+        ["systemctl", "is-active", service],
+        capture_output=True, text=True,
+    )
+    return {
+        "service": service,
+        "status":  result.stdout.strip(),   # "active" | "inactive" | "failed"
+        "running": result.returncode == 0,
+    }
 
 
 # ── WebSocket broadcast ────────────────────────────────────────────────────────

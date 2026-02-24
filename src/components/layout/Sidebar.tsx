@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, CandlestickChart, ListOrdered,
-  Radio, Terminal, ChevronRight, Zap,
+  Radio, Terminal, ChevronRight, Zap, ShieldCheck,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -14,6 +14,7 @@ const NAV = [
   { href: "/positions", label: "Positions",    icon: ListOrdered },
   { href: "/signals",   label: "Signals",      icon: Radio },
   { href: "/paper",     label: "Paper Trading",icon: Terminal },
+  { href: "/admin",     label: "Admin",        icon: ShieldCheck },
 ];
 
 export default function Sidebar() {
