@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+* { box-sizing: border-box; }
+
+html, body {
+  background-color: #0d1117;
+  color: #e6edf3;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #161b22; }
+::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #8b949e; }
+
+.mono { font-family: "JetBrains Mono", "Fira Code", monospace; }
+
+/* Glow effects */
+.glow-green { box-shadow: 0 0 12px rgba(63, 185, 80, 0.2); }
+.glow-red   { box-shadow: 0 0 12px rgba(248, 81, 73, 0.2); }
+.glow-blue  { box-shadow: 0 0 12px rgba(88, 166, 255, 0.2); }
+
+/* Animated dot */
+.dot-live {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #3fb950;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.8); }
+}
