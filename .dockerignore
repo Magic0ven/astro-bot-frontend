@@ -1,0 +1,9 @@
+node_modules/
+.next/
+.env*.local
+backend/
+provision_user.sh
+start.sh
+*.md
+.DS_Store
+.cursor/
