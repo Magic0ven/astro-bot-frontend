@@ -5,15 +5,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+RUN chmod +x start.sh
+
+# Railway injects PORT; we default to 8000 for local runs
+ENV PORT=8000
+ENV PYTHONUNBUFFERED=1
+
 EXPOSE 8000
 
-ENV PYTHONUNBUFFERED=1 \
-    PORT=8000
-
-# Use shell form so $PORT is expanded at runtime from Railway's injected env var
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+CMD ["sh", "start.sh"]
