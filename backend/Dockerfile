@@ -12,6 +12,8 @@ COPY . .
 
 EXPOSE 8000
 
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1 \
+    PORT=8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use shell form so $PORT is expanded at runtime from Railway's injected env var
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
