@@ -5,6 +5,39 @@ export interface User {
   color:   string;
 }
 
+/** Full signal payload from bot (console-style display) */
+export interface FullSignalPayload {
+  action?: string;
+  asset?: string;
+  symbol?: string;
+  current_price?: number;
+  stop_loss?: number;
+  target?: number;
+  position_size_usdt?: number;
+  effective_capital?: number;
+  capital_pct?: number;
+  western_score?: number;
+  vedic_score?: number;
+  western_medium?: number;
+  vedic_medium?: number;
+  western_slope?: number;
+  vedic_slope?: number;
+  western_signal?: string;
+  vedic_signal?: string;
+  filter_reason?: string;
+  ema_value?: number;
+  ema_filter?: string;
+  numerology_label?: string;
+  numerology_mult?: number;
+  universal_day_number?: number;
+  life_path_number?: number;
+  nakshatra?: string;
+  nakshatra_multiplier?: number;
+  moon_fast?: boolean;
+  retrograde_western?: string[];
+  retrograde_vedic?: string[];
+}
+
 export interface Signal {
   id:                  number;
   timestamp:           string;
@@ -24,6 +57,8 @@ export interface Signal {
   pnl:                 number | null;
   result:              string | null;
   notes:               string | null;
+  /** JSON string of FullSignalPayload — parse to show full console-style detail */
+  full_signal?:        string | null;
 }
 
 export interface Position {

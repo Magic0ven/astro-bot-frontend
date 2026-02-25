@@ -172,18 +172,17 @@ def query_signals_db(bot_dir: Path, limit: int = 200, closed_only: bool = False,
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         where = "WHERE pnl IS NOT NULL" if closed_only else ""
-        cur.execute(f"""
-            SELECT id, timestamp, symbol, action, western_score, vedic_score,
-                   western_slope AS western_signal, vedic_slope AS vedic_signal,
-                   nakshatra, entry_price, stop_loss, target,
-                   position_usdt AS position_size_usdt, paper,
-                   close_price, pnl, result, notes
-            FROM signals
-            {where}
-            ORDER BY id DESC
-            LIMIT ?
-        """, (limit,))
-        rows = [dict(r) for r in cur.fetchall()]
+        cur.execute(f"SELECT * FROM signals {where} ORDER BY id DESC LIMIT ?", (limit,))
+        rows = []
+        for r in cur.fetchall():
+            d = dict(r)
+            # Normalize column names and include full_signal if present
+            d["western_signal"] = d.get("western_slope") or d.get("western_signal")
+            d["vedic_signal"] = d.get("vedic_slope") or d.get("vedic_signal")
+            d["position_size_usdt"] = d.get("position_usdt") or d.get("position_size_usdt")
+            if "full_signal" not in d:
+                d["full_signal"] = None
+            rows.append(d)
         conn.close()
         return rows
     except Exception:

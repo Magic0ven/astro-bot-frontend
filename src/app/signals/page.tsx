@@ -4,17 +4,28 @@ import { useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/api";
 import Header from "@/components/layout/Header";
-import type { Signal } from "@/lib/types";
+import type { Signal, FullSignalPayload } from "@/lib/types";
 import { ACTION_BG } from "@/lib/types";
 import clsx from "clsx";
-import { Radio, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Radio, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp } from "lucide-react";
+import FullSignalPanel from "@/components/signals/FullSignalPanel";
 
 function SignalRow({ s }: { s: Signal }) {
+  const [showFull, setShowFull] = useState(false);
   const action  = s.action ?? "–";
   const badge   = ACTION_BG[action] ?? "bg-surface2 text-muted border border-border";
   const isBuy   = action.includes("BUY");
   const isSell  = action.includes("SELL");
   const pnl     = s.pnl ?? null;
+
+  let fullPayload: FullSignalPayload | null = null;
+  try {
+    if (s.full_signal && typeof s.full_signal === "string") {
+      fullPayload = JSON.parse(s.full_signal) as FullSignalPayload;
+    }
+  } catch {
+    // ignore invalid JSON
+  }
 
   return (
     <div className={clsx(
@@ -58,15 +69,15 @@ function SignalRow({ s }: { s: Signal }) {
       </div>
 
       {/* Details grid */}
-      {s.entry_price && (
+      {s.entry_price != null && (
         <div className="mt-3 grid grid-cols-3 sm:grid-cols-6 gap-2">
           {[
             { label: "Entry",   value: `$${s.entry_price?.toLocaleString() ?? "–"}`,      color: "text-blue"  },
             { label: "SL",      value: `$${s.stop_loss?.toLocaleString()    ?? "–"}`,      color: "text-red"   },
             { label: "TP",      value: `$${s.target?.toLocaleString()        ?? "–"}`,      color: "text-green" },
-            { label: "Size",    value: `$${s.position_size_usdt              ?? "–"}`,      color: "text-muted" },
-            { label: "Western", value: s.western_signal                       ?? "–",       color: "text-muted" },
-            { label: "Vedic",   value: s.vedic_signal                         ?? "–",       color: "text-muted" },
+            { label: "Size",    value: `$${s.position_size_usdt ?? "–"}`,      color: "text-muted" },
+            { label: "Western", value: s.western_signal ?? "–",       color: "text-muted" },
+            { label: "Vedic",   value: s.vedic_signal   ?? "–",       color: "text-muted" },
           ].map(({ label, value, color }) => (
             <div key={label} className="bg-surface2 rounded-lg px-3 py-2">
               <p className="text-[10px] text-muted">{label}</p>
@@ -76,13 +87,32 @@ function SignalRow({ s }: { s: Signal }) {
         </div>
       )}
 
-      {/* Nakshatra + scores */}
-      <div className="mt-2 flex items-center gap-4 text-[11px] text-muted">
-        {s.nakshatra && <span>☽ {s.nakshatra}</span>}
-        {s.western_score != null && <span>W: {s.western_score.toFixed(3)}</span>}
-        {s.vedic_score   != null && <span>V: {s.vedic_score.toFixed(3)}</span>}
-        {s.notes && <span className="text-orange italic">{s.notes}</span>}
+      {/* Nakshatra + scores + Full signal toggle */}
+      <div className="mt-2 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-4 text-[11px] text-muted">
+          {s.nakshatra && <span>☽ {s.nakshatra}</span>}
+          {s.western_score != null && <span>W: {s.western_score.toFixed(3)}</span>}
+          {s.vedic_score   != null && <span>V: {s.vedic_score.toFixed(3)}</span>}
+          {s.notes && <span className="text-orange italic">{s.notes}</span>}
+        </div>
+        {fullPayload && (
+          <button
+            type="button"
+            onClick={() => setShowFull((v) => !v)}
+            className="flex items-center gap-1 text-[11px] text-blue hover:underline"
+          >
+            {showFull ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            {showFull ? "Hide" : "Show"} full signal
+          </button>
+        )}
       </div>
+
+      {/* Full signal panel (console-style) */}
+      {showFull && fullPayload && (
+        <div className="mt-4">
+          <FullSignalPanel payload={fullPayload} onClose={() => setShowFull(false)} />
+        </div>
+      )}
     </div>
   );
 }
