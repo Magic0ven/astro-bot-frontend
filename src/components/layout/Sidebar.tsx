@@ -4,17 +4,18 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, CandlestickChart, ListOrdered,
-  Radio, Terminal, ChevronRight, Zap, ShieldCheck,
+  Radio, Terminal, ChevronRight, Zap, ShieldCheck, Target,
 } from "lucide-react";
 import clsx from "clsx";
 
 const NAV = [
-  { href: "/",          label: "Dashboard",    icon: LayoutDashboard },
-  { href: "/chart",     label: "Chart",        icon: CandlestickChart },
-  { href: "/positions", label: "Positions",    icon: ListOrdered },
-  { href: "/signals",   label: "Signals",      icon: Radio },
-  { href: "/paper",     label: "Paper Trading",icon: Terminal },
-  { href: "/admin",     label: "Admin",        icon: ShieldCheck },
+  { href: "/",            label: "Dashboard",    icon: LayoutDashboard },
+  { href: "/chart",       label: "Chart",        icon: CandlestickChart },
+  { href: "/predictions", label: "Predictions",  icon: Target },
+  { href: "/positions",   label: "Positions",    icon: ListOrdered },
+  { href: "/signals",     label: "Signals",      icon: Radio },
+  { href: "/paper",       label: "Paper Trading",icon: Terminal },
+  { href: "/admin",       label: "Admin",        icon: ShieldCheck },
 ];
 
 export default function Sidebar() {

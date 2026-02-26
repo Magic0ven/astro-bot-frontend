@@ -32,6 +32,16 @@ export const api = {
   latestSignal:  (uid: string)                  => get(`/api/users/${uid}/latest-signal`),
   ohlcv:         (symbol = "BTC/USDT", tf = "4h", limit = 500) =>
                    get(`/api/ohlcv?symbol=${encodeURIComponent(symbol)}&timeframe=${tf}&limit=${limit}`),
+  ticker:        () => get<Record<string, number>>("/api/ticker"),
+  predictionsCalendar: (untilYear?: number, asset?: string) => {
+    const params = new URLSearchParams();
+    if (untilYear) params.set("until_year", String(untilYear));
+    if (asset) params.set("asset", asset);
+    const q = params.toString();
+    return get<import("@/lib/types").PredictionsCalendarResponse>(
+      `/api/predictions/calendar${q ? `?${q}` : ""}`
+    );
+  },
   openPaperTrade: (body: {
     user_id: string; side: string; entry: number;
     sl: number; tp: number; notional: number; signal?: string;

@@ -16,7 +16,7 @@ import re
 import shlex
 import sqlite3
 import subprocess
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -347,6 +347,123 @@ def get_ohlcv(symbol: str = "BTC/USDT", timeframe: str = "4h", limit: int = 500)
         ]
     except Exception as e:
         raise HTTPException(500, f"Hyperliquid OHLCV error: {e}")
+
+
+@app.get("/api/ticker")
+def get_ticker():
+    """
+    Returns current mid prices for all coins from Hyperliquid (allMids).
+    Used by the Predictions page to show current market price vs signal levels.
+    """
+    import urllib.request as urlreq
+    payload = json.dumps({"type": "allMids"}).encode()
+    try:
+        req = urlreq.Request(
+            "https://api.hyperliquid.xyz/info",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urlreq.urlopen(req, timeout=10) as resp:
+            raw = json.loads(resp.read())
+        # Convert string values to float for frontend
+        return {k: float(v) for k, v in raw.items()}
+    except Exception as e:
+        raise HTTPException(500, f"Hyperliquid ticker error: {e}")
+
+
+# ── Prediction calendar (numerology: UDN + resonance till Dec 31) ───────────────
+
+def _digital_root(n: int) -> int:
+    n = abs(n)
+    while n > 9:
+        n = sum(int(d) for d in str(n))
+    return n
+
+
+def _date_digit_sum(d: date) -> int:
+    raw = f"{d.year:04d}{d.month:02d}{d.day:02d}"
+    return sum(int(ch) for ch in raw)
+
+
+def _universal_day_number(d: date) -> int:
+    return _digital_root(_date_digit_sum(d))
+
+
+def _life_path_number(d: date) -> int:
+    return _digital_root(_date_digit_sum(d))
+
+
+@app.get("/api/predictions/calendar")
+def get_predictions_calendar(
+    until_year: int = 0,
+    asset: Optional[str] = None,
+):
+    """
+    Returns day-by-day numerology predictions from today through 31 December.
+
+    - until_year: year for Dec 31 (default: current year)
+    - asset: asset key from assets_dna (default: first asset, e.g. BTC)
+
+    Each row: date_iso, udn (Universal Day Number), resonance (True on 1.5x days), multiplier (1.0 or 1.5).
+    """
+    dna_path = BOT_DIR / "assets_dna.json"
+    if not dna_path.exists():
+        raise HTTPException(404, "assets_dna.json not found")
+
+    with open(dna_path) as f:
+        assets = json.load(f)
+
+    # Drop comment keys
+    assets = {k: v for k, v in assets.items() if not str(k).startswith("_")}
+    if not assets:
+        raise HTTPException(404, "No assets in assets_dna.json")
+
+    asset_key = asset or next(iter(assets))
+    asset_dna = assets.get(asset_key)
+    if not asset_dna:
+        raise HTTPException(404, f"Asset {asset!r} not found")
+
+    genesis_str = asset_dna.get("genesis_datetime") or ""
+    try:
+        # "2009-01-03T18:15:05Z" -> date
+        if "T" in genesis_str:
+            genesis_date = datetime.fromisoformat(genesis_str.replace("Z", "+00:00")).date()
+        else:
+            genesis_date = datetime.strptime(genesis_str[:10], "%Y-%m-%d").date()
+    except Exception:
+        raise HTTPException(400, "Invalid genesis_datetime in assets_dna")
+
+    life_path = _life_path_number(genesis_date)
+    now = datetime.now(timezone.utc)
+    today = now.date()
+    year = until_year or today.year
+    end = date(year, 12, 31)
+    if end < today:
+        end = date(today.year, 12, 31)
+
+    out = []
+    d = today
+    while d <= end:
+        udn = _universal_day_number(d)
+        resonance = udn == life_path
+        mult = 1.5 if resonance else 1.0
+        out.append({
+            "date": d.isoformat(),
+            "udn": udn,
+            "resonance": resonance,
+            "multiplier": mult,
+            "label": "RESONANCE (1.5x)" if resonance else "Normal (1.0x)",
+        })
+        d += timedelta(days=1)
+
+    return {
+        "asset": asset_key,
+        "life_path_number": life_path,
+        "from": today.isoformat(),
+        "to": end.isoformat(),
+        "days": out,
+    }
 
 
 # ── Paper trade manual entry ───────────────────────────────────────────────────

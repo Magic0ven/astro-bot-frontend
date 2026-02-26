@@ -5,6 +5,23 @@ export interface User {
   color:   string;
 }
 
+/** Single day in the predictions calendar (numerology till Dec 31) */
+export interface PredictionsCalendarDay {
+  date:      string;
+  udn:       number;
+  resonance: boolean;
+  multiplier: number;
+  label:     string;
+}
+
+export interface PredictionsCalendarResponse {
+  asset:           string;
+  life_path_number: number;
+  from:            string;
+  to:              string;
+  days:            PredictionsCalendarDay[];
+}
+
 /** Full signal payload from bot (console-style display) */
 export interface FullSignalPayload {
   action?: string;
