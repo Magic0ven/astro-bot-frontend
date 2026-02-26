@@ -41,15 +41,15 @@ export default function FullSignalPanel({ payload, onClose }: Props) {
       <div className="p-4 space-y-0">
         {row("Action", <span className={clsx("px-2 py-0.5 rounded-full text-xs font-bold", badge)}>{action}</span>)}
         {row("Asset", payload.asset)}
-        {row("Price", payload.current_price != null ? `$${payload.current_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : null)}
-        {row("Stop Loss", payload.stop_loss != null ? `$${payload.stop_loss.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, "text-red")}
-        {row("Target", payload.target != null ? `$${payload.target.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, "text-green")}
+        {row("Price", payload.current_price != null ? `$${payload.current_price.toLocaleString(undefined, ({ minimumFractionDigits: 2 }))}` : null)}
+        {row("Stop Loss", payload.stop_loss != null ? `$${payload.stop_loss.toLocaleString(undefined, ({ minimumFractionDigits: 2 }))}`, "text-red")}
+        {row("Target", payload.target != null ? `$${payload.target.toLocaleString(undefined, ({ minimumFractionDigits: 2 }))}`, "text-green")}
         {row(
           "Capital base",
           payload.effective_capital != null && payload.capital_pct != null
-            ? `$${payload.effective_capital.toLocaleString(undefined, { minimumFractionDigits: 2 })}  (${Math.round((payload.capital_pct ?? 0) * 100)}% of balance)`
+            ? `$${payload.effective_capital.toLocaleString(undefined, ({ minimumFractionDigits: 2 }))}  (${Math.round((payload.capital_pct ?? 0) * 100)}% of balance)`
             : payload.effective_capital != null
-              ? `$${payload.effective_capital.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+              ? `$${payload.effective_capital.toLocaleString(undefined, ({ minimumFractionDigits: 2 }))}`
               : null
         )}
         {row("", "")}
@@ -78,7 +78,7 @@ export default function FullSignalPanel({ payload, onClose }: Props) {
             : null
         )}
         {row("Moon Fast", payload.moon_fast != null ? String(payload.moon_fast) : null)}
-        {row("EMA", payload.ema_value != null && payload.ema_filter ? `$${payload.ema_value.toLocaleString(undefined, { minimumFractionDigits: 2 })}  (filter: ${payload.ema_filter})` : payload.ema_value != null ? `$${payload.ema_value.toLocaleString()}` : null)}
+        {row("EMA", payload.ema_value != null && payload.ema_filter ? `$${payload.ema_value.toLocaleString(undefined, ({ minimumFractionDigits: 2 }))}  (filter: ${payload.ema_filter})` : payload.ema_value != null ? `$${payload.ema_value.toLocaleString()}` : null)}
         {payload.filter_reason && row("Filtered", <span className="text-orange">{payload.filter_reason}</span>)}
         {row("Retrograde (W)", Array.isArray(payload.retrograde_western) ? payload.retrograde_western.join(", ") || "None" : payload.retrograde_western)}
         {row("Retrograde (V)", Array.isArray(payload.retrograde_vedic) ? payload.retrograde_vedic.join(", ") || "None" : payload.retrograde_vedic)}
