@@ -41,6 +41,17 @@ function dateKey(year: number, month: number, day: number): string {
 
 const CURRENT_YEAR = new Date().getFullYear();
 
+function actionDisplayLabel(action: string): string {
+  if (action === "STRONG_BUY") return "Strong Buy";
+  if (action === "WEAK_BUY") return "Weak Buy";
+  if (action === "STRONG_SELL") return "Strong Sell";
+  if (action === "WEAK_SELL") return "Weak Sell";
+  if (action === "NO_TRADE") return "No Trade";
+  if (action === "HOLD") return "Hold";
+  if (action === "COLLECTING_DATA") return "…";
+  return action.replace(/_/g, " ");
+}
+
 export default function PredictionsPage() {
   const [userId, setUserId] = useState("default");
   const [selectedMonth, setSelectedMonth] = useState(1);   // January default
@@ -185,7 +196,7 @@ export default function PredictionsPage() {
                                   {data.action.includes("BUY") && <TrendingUp size={8} />}
                                   {data.action.includes("SELL") && <TrendingDown size={8} />}
                                   {!data.action.includes("BUY") && !data.action.includes("SELL") && <Minus size={8} />}
-                                  {data.action.replace("STRONG_", "").replace("WEAK_", "")}
+                                  {actionDisplayLabel(data.action)}
                                 </span>
                               )}
                             </>
