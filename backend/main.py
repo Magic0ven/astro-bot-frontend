@@ -59,7 +59,8 @@ if _USE_PG:
                            vedic_slope   AS vedic_signal,
                            nakshatra, entry_price, stop_loss, target,
                            position_usdt AS position_size_usdt,
-                           paper, close_price, pnl, result, notes
+                           paper, close_price, pnl, result, notes,
+                           full_signal
                     FROM signals
                     {where}
                     ORDER BY id DESC
