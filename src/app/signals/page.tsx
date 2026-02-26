@@ -11,13 +11,6 @@ import { Radio, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp } from "
 import FullSignalPanel from "@/components/signals/FullSignalPanel";
 
 function SignalRow({ s }: { s: Signal }) {
-  const [showFull, setShowFull] = useState(false);
-  const action  = s.action ?? "–";
-  const badge   = ACTION_BG[action] ?? "bg-surface2 text-muted border border-border";
-  const isBuy   = action.includes("BUY");
-  const isSell  = action.includes("SELL");
-  const pnl     = s.pnl ?? null;
-
   let fullPayload: FullSignalPayload | null = null;
   try {
     if (s.full_signal && typeof s.full_signal === "string") {
@@ -26,6 +19,12 @@ function SignalRow({ s }: { s: Signal }) {
   } catch {
     // ignore invalid JSON
   }
+  const [showFull, setShowFull] = useState(!!fullPayload);
+  const action  = s.action ?? "–";
+  const badge   = ACTION_BG[action] ?? "bg-surface2 text-muted border border-border";
+  const isBuy   = action.includes("BUY");
+  const isSell  = action.includes("SELL");
+  const pnl     = s.pnl ?? null;
 
   return (
     <div className={clsx(

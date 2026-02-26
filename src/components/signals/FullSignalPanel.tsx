@@ -27,12 +27,18 @@ export default function FullSignalPanel({ payload, onClose }: Props) {
   const badge = ACTION_BG[action] ?? "bg-surface2 text-muted border border-border";
   const stopLossVal = payload.stop_loss != null ? `$${payload.stop_loss.toLocaleString(undefined, FRACTION_2)}` : null;
   const targetVal = payload.target != null ? `$${payload.target.toLocaleString(undefined, FRACTION_2)}` : null;
+  const sizeUsdtVal = payload.position_size_usdt != null ? `$${payload.position_size_usdt.toLocaleString(undefined, FRACTION_2)}` : null;
+  const timeLabel = payload.timestamp
+    ? new Date(payload.timestamp).toUTCString().replace(/ GMT$/, "")
+    : null;
 
   return (
     <div className="rounded-xl border border-border bg-surface overflow-hidden">
       {onClose && (
         <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-surface2">
-          <span className="text-xs font-semibold text-muted">Full signal parameters</span>
+          <span className="text-xs font-semibold text-muted">
+            {timeLabel ? `Full signal — ${timeLabel}` : "Full signal parameters"}
+          </span>
           <button
             type="button"
             onClick={onClose}
@@ -48,6 +54,7 @@ export default function FullSignalPanel({ payload, onClose }: Props) {
         {row("Price", payload.current_price != null ? `$${payload.current_price.toLocaleString(undefined, FRACTION_2)}` : null)}
         {row("Stop Loss", stopLossVal, "text-red")}
         {row("Target", targetVal, "text-green")}
+        {row("Size (USDT)", sizeUsdtVal)}
         {row(
           "Capital base",
           payload.effective_capital != null && payload.capital_pct != null

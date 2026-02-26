@@ -36,6 +36,7 @@ export interface FullSignalPayload {
   moon_fast?: boolean;
   retrograde_western?: string[];
   retrograde_vedic?: string[];
+  timestamp?: string;
 }
 
 export interface Signal {
