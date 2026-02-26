@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/api";
 import { api } from "@/lib/api";
 import Header from "@/components/layout/Header";
-import type { Signal } from "@/lib/types";
+import type { Signal, PredictionsCalendarDay } from "@/lib/types";
 import { ACTION_BG } from "@/lib/types";
 import clsx from "clsx";
 import { Target, TrendingUp, TrendingDown, Minus, Calendar } from "lucide-react";
@@ -20,23 +20,31 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-function groupDaysByMonth(days: { date: string; udn: number; resonance: boolean; label: string }[]) {
-  const byMonth: Record<string, typeof days> = {};
-  for (const day of days) {
-    const monthKey = day.date.slice(0, 7); // "2026-02"
-    if (!byMonth[monthKey]) byMonth[monthKey] = [];
-    byMonth[monthKey].push(day);
-  }
-  return Object.keys(byMonth).sort().map((key) => {
-    const [y, m] = key.split("-").map(Number);
-    return { key, label: `${MONTH_NAMES[m - 1]} ${y}`, days: byMonth[key]! };
-  });
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function buildMonthGrid(year: number, month: number): (number | null)[] {
+  const first = new Date(year, month - 1, 1);
+  const firstWeekday = first.getDay();
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+  return cells;
+}
+
+function dateKey(year: number, month: number, day: number): string {
+  const m = month < 10 ? `0${month}` : String(month);
+  const d = day < 10 ? `0${day}` : String(day);
+  return `${year}-${m}-${d}`;
 }
 
 const CURRENT_YEAR = new Date().getFullYear();
 
 export default function PredictionsPage() {
   const [userId, setUserId] = useState("default");
+  const [selectedMonth, setSelectedMonth] = useState(1);   // January default
+  const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR);
 
   const { data: calendar, isLoading: calendarLoading } = useSWR(
     ["predictions-calendar", CURRENT_YEAR],
@@ -106,50 +114,87 @@ export default function PredictionsPage() {
             <div className="p-4">
               <p className="text-[11px] text-muted mb-4">
                 UDN = Universal Day Number. Resonance = UDN matches asset Life Path (1.5× size days).
+                {calendar.days.some((d) => d.action) && " Prediction = signal from bot (Western + Vedic + numerology)."}
               </p>
-              <div className="space-y-6 overflow-y-auto max-h-[420px] pr-1">
-                {groupDaysByMonth(calendar.days).map(({ key, label, days }) => (
-                  <div key={key} className="rounded-lg border border-border bg-surface2/50 overflow-hidden">
-                    <div className="px-3 py-2 border-b border-border bg-surface2 text-xs font-semibold text-muted uppercase tracking-wider">
-                      {label}
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-left text-[11px] font-medium text-muted uppercase tracking-wider border-b border-border/50">
-                            <th className="px-3 py-1.5">Date</th>
-                            <th className="px-3 py-1.5">UDN</th>
-                            <th className="px-3 py-1.5">Day type</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {days.map((day) => (
-                            <tr
-                              key={day.date}
-                              className={clsx(
-                                "border-b border-border/30 last:border-0",
-                                day.resonance && "bg-green/10"
-                              )}
-                            >
-                              <td className="px-3 py-1 mono text-[11px]">{day.date}</td>
-                              <td className="px-3 py-1 font-semibold mono">{day.udn}</td>
-                              <td className="px-3 py-1">
+
+              {/* Month + Year selector */}
+              <div className="flex items-center gap-3 mb-4">
+                <label className="text-xs font-medium text-muted">Month</label>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                  className="bg-surface2 border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-blue/30"
+                >
+                  {MONTH_NAMES.map((name, i) => (
+                    <option key={i} value={i + 1}>{name}</option>
+                  ))}
+                </select>
+                <label className="text-xs font-medium text-muted">Year</label>
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(Number(e.target.value))}
+                  className="bg-surface2 border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-blue/30"
+                >
+                  {[CURRENT_YEAR - 1, CURRENT_YEAR, CURRENT_YEAR + 1].filter((y) => y >= 2024).map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Calendar grid */}
+              <div className="border border-border rounded-lg overflow-hidden bg-surface2/30">
+                <div className="grid grid-cols-7 text-[11px] font-medium text-muted uppercase tracking-wider border-b border-border bg-surface2">
+                  {WEEKDAYS.map((w) => (
+                    <div key={w} className="p-2 text-center">{w}</div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 [&>div:nth-child(7n)]:border-r-0">
+                  {(() => {
+                    const dayMap = new Map<string, PredictionsCalendarDay>();
+                    for (const d of calendar.days) dayMap.set(d.date, d);
+                    const cells = buildMonthGrid(selectedYear, selectedMonth);
+                    const hasPrediction = calendar.days.some((d) => d.action);
+                    return cells.map((dayNum, idx) => {
+                      if (dayNum === null) {
+                        return <div key={`e-${idx}`} className="min-h-[88px] p-2 border-b border-r border-border/50 bg-surface/50" />;
+                      }
+                      const key = dateKey(selectedYear, selectedMonth, dayNum);
+                      const data = dayMap.get(key);
+                      return (
+                        <div
+                          key={key}
+                          className={clsx(
+                            "min-h-[88px] p-2 border-b border-r border-border/50 flex flex-col",
+                            data?.resonance ? "bg-green/10" : "bg-surface"
+                          )}
+                        >
+                          <span className="text-sm font-semibold text-muted">{dayNum}</span>
+                          {data && (
+                            <>
+                              <span className="text-[10px] mono font-semibold mt-0.5">UDN {data.udn}</span>
+                              <span className={clsx("text-[10px] mt-0.5", data.resonance ? "text-green font-medium" : "text-muted")}>
+                                {data.resonance ? "1.5×" : "1.0×"}
+                              </span>
+                              {hasPrediction && data.action && (
                                 <span
                                   className={clsx(
-                                    "text-xs font-medium",
-                                    day.resonance ? "text-green" : "text-muted"
+                                    "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold mono mt-1 w-fit",
+                                    ACTION_BG[data.action] ?? "bg-surface2 text-muted border border-border"
                                   )}
                                 >
-                                  {day.label}
+                                  {data.action.includes("BUY") && <TrendingUp size={8} />}
+                                  {data.action.includes("SELL") && <TrendingDown size={8} />}
+                                  {!data.action.includes("BUY") && !data.action.includes("SELL") && <Minus size={8} />}
+                                  {data.action.replace("STRONG_", "").replace("WEAK_", "")}
                                 </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ))}
+                              )}
+                            </>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
               </div>
             </div>
           )}

@@ -5,13 +5,20 @@ export interface User {
   color:   string;
 }
 
-/** Single day in the predictions calendar (numerology till Dec 31) */
+/** Single day in the predictions calendar (numerology + optional full prediction) */
 export interface PredictionsCalendarDay {
-  date:      string;
-  udn:       number;
-  resonance: boolean;
-  multiplier: number;
-  label:     string;
+  date:           string;
+  udn:            number;
+  resonance:      boolean;
+  multiplier:     number;
+  label:          string;
+  /** From bot script: STRONG_BUY, WEAK_SELL, HOLD, etc. */
+  action?:        string;
+  western_score?: number;
+  vedic_score?:   number;
+  western_signal?: string;
+  vedic_signal?:  string;
+  nakshatra?:     string;
 }
 
 export interface PredictionsCalendarResponse {

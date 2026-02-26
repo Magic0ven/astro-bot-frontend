@@ -16,9 +16,9 @@ import re
 import shlex
 import sqlite3
 import subprocess
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -372,127 +372,61 @@ def get_ticker():
         raise HTTPException(500, f"Hyperliquid ticker error: {e}")
 
 
-# ── Prediction calendar (numerology: UDN + resonance till Dec 31) ───────────────
+# ── Prediction calendar (static JSON) ─────────────────────────────────────────
 
-def _digital_root(n: int) -> int:
-    n = abs(n)
-    while n > 9:
-        n = sum(int(d) for d in str(n))
-    return n
-
-
-def _date_digit_sum(d: date) -> int:
-    raw = f"{d.year:04d}{d.month:02d}{d.day:02d}"
-    return sum(int(ch) for ch in raw)
-
-
-def _universal_day_number(d: date) -> int:
-    return _digital_root(_date_digit_sum(d))
-
-
-def _life_path_number(d: date) -> int:
-    return _digital_root(_date_digit_sum(d))
-
-
-def _find_assets_dna() -> Tuple[Optional[Path], list]:
-    """Try multiple locations for assets_dna.json. Returns (path or None, list of paths tried)."""
-    backend_dir = Path(__file__).parent.resolve()
-    tried = []
-    candidates = [
-        BOT_DIR / "assets_dna.json",
-        backend_dir / "assets_dna.json",
-        backend_dir.parent / "assets_dna.json",
-        Path.cwd() / "assets_dna.json",
-        Path.cwd() / "backend" / "assets_dna.json",
-    ]
-    for p in candidates:
-        p = p.resolve()
-        tried.append(str(p))
-        if p.exists():
-            return (p, tried)
-    return (None, tried)
+def _predictions_calendar_file() -> Optional[Path]:
+    """Path to static predictions JSON in backend repo (backend/data/predictions_calendar.json)."""
+    p = Path(__file__).parent / "data" / "predictions_calendar.json"
+    return p if p.exists() else None
 
 
 @app.get("/api/predictions/calendar")
-def get_predictions_calendar(
-    until_year: int = 0,
-    asset: Optional[str] = None,
-):
+def get_predictions_calendar(until_year: int = 0, asset: Optional[str] = None):
     """
-    Returns day-by-day numerology predictions from today through 31 December.
-
-    - until_year: year for Dec 31 (default: current year)
-    - asset: asset key from assets_dna (default: first asset, e.g. BTC)
-
-    Each row: date_iso, udn (Universal Day Number), resonance (True on 1.5x days), multiplier (1.0 or 1.5).
+    Returns day-by-day predictions from backend/data/predictions_calendar.json.
+    Query params: until_year (filter days to this year), asset (ignored; file is single-asset).
     """
-    dna_path, tried_paths = _find_assets_dna()
-    if not dna_path:
+    year = until_year or datetime.now(timezone.utc).date().year
+    calendar_file = _predictions_calendar_file()
+    if not calendar_file:
         return {
             "unavailable": True,
-            "reason": "assets_dna.json not found",
-            "hint": "Set BOT_DIR to your bot repo, or place assets_dna.json in the backend directory.",
-            "tried_paths": tried_paths,
+            "reason": "predictions_calendar.json not found",
+            "hint": "Add backend/data/predictions_calendar.json (e.g. from bot: python scripts/predict_calendar.py --to YYYY-12-31).",
             "asset": None,
             "life_path_number": None,
             "from": None,
             "to": None,
             "days": [],
         }
-
-    with open(dna_path) as f:
-        assets = json.load(f)
-
-    # Drop comment keys
-    assets = {k: v for k, v in assets.items() if not str(k).startswith("_")}
-    if not assets:
-        raise HTTPException(404, "No assets in assets_dna.json")
-
-    asset_key = asset or next(iter(assets))
-    asset_dna = assets.get(asset_key)
-    if not asset_dna:
-        raise HTTPException(404, f"Asset {asset!r} not found")
-
-    genesis_str = asset_dna.get("genesis_datetime") or ""
     try:
-        # "2009-01-03T18:15:05Z" -> date
-        if "T" in genesis_str:
-            genesis_date = datetime.fromisoformat(genesis_str.replace("Z", "+00:00")).date()
-        else:
-            genesis_date = datetime.strptime(genesis_str[:10], "%Y-%m-%d").date()
-    except Exception:
-        raise HTTPException(400, "Invalid genesis_datetime in assets_dna")
-
-    life_path = _life_path_number(genesis_date)
-    now = datetime.now(timezone.utc)
-    today = now.date()
-    year = until_year or today.year
-    end = date(year, 12, 31)
-    if end < today:
-        end = date(today.year, 12, 31)
-
-    out = []
-    d = today
-    while d <= end:
-        udn = _universal_day_number(d)
-        resonance = udn == life_path
-        mult = 1.5 if resonance else 1.0
-        out.append({
-            "date": d.isoformat(),
-            "udn": udn,
-            "resonance": resonance,
-            "multiplier": mult,
-            "label": "RESONANCE (1.5x)" if resonance else "Normal (1.0x)",
-        })
-        d += timedelta(days=1)
-
-    return {
-        "asset": asset_key,
-        "life_path_number": life_path,
-        "from": today.isoformat(),
-        "to": end.isoformat(),
-        "days": out,
-    }
+        with open(calendar_file) as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return {
+            "unavailable": True,
+            "reason": "Failed to load predictions_calendar.json",
+            "asset": None,
+            "life_path_number": None,
+            "from": None,
+            "to": None,
+            "days": [],
+        }
+    if not isinstance(data.get("days"), list):
+        return {
+            "unavailable": True,
+            "reason": "Invalid predictions_calendar.json format",
+            "asset": None,
+            "life_path_number": None,
+            "from": None,
+            "to": None,
+            "days": [],
+        }
+    year_str = str(year)
+    data["days"] = [d for d in data["days"] if d.get("date", "").startswith(year_str)]
+    data["from"] = data["days"][0]["date"] if data["days"] else None
+    data["to"] = data["days"][-1]["date"] if data["days"] else None
+    return data
 
 
 # ── Paper trade manual entry ───────────────────────────────────────────────────
