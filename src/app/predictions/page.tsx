@@ -82,7 +82,7 @@ export default function PredictionsPage() {
               <Calendar size={16} className="text-blue" />
               <span className="text-sm font-semibold">Predicted calendar till 31 December</span>
             </div>
-            {calendar && (
+            {calendar && !calendar.unavailable && calendar.asset && (
               <span className="text-[11px] text-muted">
                 {calendar.asset} · Life Path {calendar.life_path_number} · {calendar.from} → {calendar.to}
               </span>
@@ -91,10 +91,18 @@ export default function PredictionsPage() {
           {calendarLoading && (
             <div className="p-8 text-center text-muted text-sm">Loading calendar…</div>
           )}
-          {!calendarLoading && !calendar && (
-            <div className="p-6 text-center text-muted text-sm">Calendar unavailable (ensure backend can read assets_dna.json).</div>
+          {!calendarLoading && (!calendar || calendar.unavailable) && (
+            <div className="p-6 text-center">
+              <p className="text-muted text-sm font-medium">{calendar?.reason ?? "Calendar unavailable"}</p>
+              {calendar?.hint && <p className="text-[11px] text-muted mt-1">{calendar.hint}</p>}
+              {calendar?.tried_paths && calendar.tried_paths.length > 0 && (
+                <p className="text-[10px] text-muted/80 mt-2 mono max-w-md mx-auto break-all">
+                  Tried: {calendar.tried_paths.join(", ")}
+                </p>
+              )}
+            </div>
           )}
-          {calendar && !calendarLoading && (
+          {calendar && !calendarLoading && !calendar.unavailable && calendar.days?.length > 0 && (
             <div className="p-4">
               <p className="text-[11px] text-muted mb-4">
                 UDN = Universal Day Number. Resonance = UDN matches asset Life Path (1.5× size days).

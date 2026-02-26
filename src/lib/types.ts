@@ -15,11 +15,15 @@ export interface PredictionsCalendarDay {
 }
 
 export interface PredictionsCalendarResponse {
-  asset:           string;
-  life_path_number: number;
-  from:            string;
-  to:              string;
-  days:            PredictionsCalendarDay[];
+  unavailable?:   boolean;
+  reason?:        string;
+  hint?:          string;
+  tried_paths?:   string[];
+  asset:          string | null;
+  life_path_number: number | null;
+  from:           string | null;
+  to:             string | null;
+  days:           PredictionsCalendarDay[];
 }
 
 /** Full signal payload from bot (console-style display) */

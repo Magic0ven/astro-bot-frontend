@@ -1,0 +1,8 @@
+{
+  "_comment": "Fallback for Predictions calendar when BOT_DIR is not set. Only BTC genesis needed for UDN/resonance.",
+  "BTC": {
+    "name": "Bitcoin",
+    "symbol": "BTC/USDT",
+    "genesis_datetime": "2009-01-03T18:15:05Z"
+  }
+}

@@ -18,7 +18,7 @@ import sqlite3
 import subprocess
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -394,6 +394,25 @@ def _life_path_number(d: date) -> int:
     return _digital_root(_date_digit_sum(d))
 
 
+def _find_assets_dna() -> Tuple[Optional[Path], list]:
+    """Try multiple locations for assets_dna.json. Returns (path or None, list of paths tried)."""
+    backend_dir = Path(__file__).parent.resolve()
+    tried = []
+    candidates = [
+        BOT_DIR / "assets_dna.json",
+        backend_dir / "assets_dna.json",
+        backend_dir.parent / "assets_dna.json",
+        Path.cwd() / "assets_dna.json",
+        Path.cwd() / "backend" / "assets_dna.json",
+    ]
+    for p in candidates:
+        p = p.resolve()
+        tried.append(str(p))
+        if p.exists():
+            return (p, tried)
+    return (None, tried)
+
+
 @app.get("/api/predictions/calendar")
 def get_predictions_calendar(
     until_year: int = 0,
@@ -407,9 +426,19 @@ def get_predictions_calendar(
 
     Each row: date_iso, udn (Universal Day Number), resonance (True on 1.5x days), multiplier (1.0 or 1.5).
     """
-    dna_path = BOT_DIR / "assets_dna.json"
-    if not dna_path.exists():
-        raise HTTPException(404, "assets_dna.json not found")
+    dna_path, tried_paths = _find_assets_dna()
+    if not dna_path:
+        return {
+            "unavailable": True,
+            "reason": "assets_dna.json not found",
+            "hint": "Set BOT_DIR to your bot repo, or place assets_dna.json in the backend directory.",
+            "tried_paths": tried_paths,
+            "asset": None,
+            "life_path_number": None,
+            "from": None,
+            "to": None,
+            "days": [],
+        }
 
     with open(dna_path) as f:
         assets = json.load(f)
