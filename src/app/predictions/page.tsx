@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/api";
 import { api } from "@/lib/api";
@@ -56,6 +56,11 @@ export default function PredictionsPage() {
   const [userId, setUserId] = useState("default");
   const [selectedMonth, setSelectedMonth] = useState(1);   // January default
   const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR);
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedDayKey(null);
+  }, [selectedMonth, selectedYear]);
 
   const { data: calendar, isLoading: calendarLoading } = useSWR(
     ["predictions-calendar", CURRENT_YEAR],
@@ -125,7 +130,7 @@ export default function PredictionsPage() {
             <div className="p-4">
               <p className="text-[11px] text-muted mb-4">
                 UDN = Universal Day Number. Resonance = UDN matches asset Life Path (1.5× size days).
-                {calendar.days.some((d) => d.action) && " Prediction = signal from bot (Western + Vedic + numerology)."}
+                {calendar.days.some((d) => d.action) && " Prediction = signal from bot (Western + Vedic + numerology). Click a day to see why it’s Buy or Sell."}
               </p>
 
               {/* Month + Year selector */}
@@ -171,12 +176,17 @@ export default function PredictionsPage() {
                       }
                       const key = dateKey(selectedYear, selectedMonth, dayNum);
                       const data = dayMap.get(key);
+                      const isSelected = selectedDayKey === key;
                       return (
-                        <div
+                        <button
                           key={key}
+                          type="button"
+                          onClick={() => setSelectedDayKey(data ? (isSelected ? null : key) : null)}
                           className={clsx(
-                            "min-h-[88px] p-2 border-b border-r border-border/50 flex flex-col",
-                            data?.resonance ? "bg-green/10" : "bg-surface"
+                            "min-h-[88px] p-2 border-b border-r border-border/50 flex flex-col text-left w-full",
+                            data?.resonance ? "bg-green/10" : "bg-surface",
+                            data && "hover:bg-surface2/80 cursor-pointer transition-colors",
+                            isSelected && "ring-2 ring-blue ring-inset"
                           )}
                         >
                           <span className="text-sm font-semibold text-muted">{dayNum}</span>
@@ -201,12 +211,91 @@ export default function PredictionsPage() {
                               )}
                             </>
                           )}
-                        </div>
+                        </button>
                       );
                     });
                   })()}
                 </div>
               </div>
+
+              {/* Why this signal: factors for selected day */}
+              {selectedDayKey && (() => {
+                const dayData = calendar.days.find((d) => d.date === selectedDayKey);
+                if (!dayData) return null;
+                const wScore = dayData.western_score ?? 0;
+                const vScore = dayData.vedic_score ?? 0;
+                const wMed = dayData.western_medium ?? null;
+                const vMed = dayData.vedic_medium ?? null;
+                const wSlope = dayData.western_slope ?? null;
+                const vSlope = dayData.vedic_slope ?? null;
+                const wSig = dayData.western_signal ?? "–";
+                const vSig = dayData.vedic_signal ?? "–";
+                const naks = dayData.nakshatra ?? "–";
+                const retroW = (dayData.retrograde_western ?? []).filter(Boolean);
+                const retroV = (dayData.retrograde_vedic ?? []).filter(Boolean);
+                const numLabel = dayData.numerology_label ?? "";
+                const numMult = dayData.numerology_mult ?? dayData.multiplier ?? 1.0;
+                const lifePath = calendar.life_path_number ?? null;
+                return (
+                  <div className="mt-4 p-4 rounded-lg border border-border bg-surface2/50">
+                    <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
+                      Why {dayData.date} → {actionDisplayLabel(dayData.action ?? "–")}
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <p className="text-[11px] text-muted uppercase mb-0.5">Western</p>
+                        <p className="font-medium">
+                          {wScore.toFixed(4)}{" "}
+                          {wMed != null && wSlope != null && (
+                            <span className="text-[11px] text-muted font-normal">
+                              (med: {wMed.toFixed(4)} slope: {wSlope >= 0 ? "+" : ""}
+                              {wSlope.toFixed(4)})
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[11px] text-muted">W Signal: {wSig}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-muted uppercase mb-0.5">Vedic</p>
+                        <p className="font-medium">
+                          {vScore.toFixed(4)}{" "}
+                          {vMed != null && vSlope != null && (
+                            <span className="text-[11px] text-muted font-normal">
+                              (med: {vMed.toFixed(4)} slope: {vSlope >= 0 ? "+" : ""}
+                              {vSlope.toFixed(4)})
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[11px] text-muted">V Signal: {vSig}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-muted uppercase mb-0.5">Nakshatra</p>
+                        <p className="font-medium">{naks}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-muted uppercase mb-0.5">Numerology</p>
+                        <p className="font-medium">
+                          {numLabel || (dayData.resonance ? "Resonance Day" : "Normal Day")}{" "}
+                          ({numMult.toFixed(1)}x)
+                        </p>
+                        <p className="text-[11px] text-muted mt-0.5">UDN {dayData.udn}</p>
+                        {lifePath != null && (
+                          <p className="text-[11px] text-muted">Life Path {lifePath}</p>
+                        )}
+                        <p className="text-[11px] text-muted mt-1">
+                          Retrograde (W): {retroW.length ? retroW.join(", ") : "None"}
+                        </p>
+                        <p className="text-[11px] text-muted">
+                          Retrograde (V): {retroV.length ? retroV.join(", ") : "None"}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-muted mt-3">
+                      Combined Western + Vedic + numerology → {actionDisplayLabel(dayData.action ?? "–")}. Click the day again to close.
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>

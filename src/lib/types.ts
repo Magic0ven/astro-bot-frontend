@@ -16,9 +16,17 @@ export interface PredictionsCalendarDay {
   action?:        string;
   western_score?: number;
   vedic_score?:   number;
+   western_medium?: number;
+   vedic_medium?:   number;
+   western_slope?:  number;
+   vedic_slope?:    number;
   western_signal?: string;
   vedic_signal?:  string;
   nakshatra?:     string;
+  retrograde_western?: string[];
+  retrograde_vedic?:   string[];
+  numerology_label?: string;
+  numerology_mult?:  number;
 }
 
 export interface PredictionsCalendarResponse {
