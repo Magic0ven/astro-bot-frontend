@@ -1,4 +1,7 @@
-FROM python:3.11-slim
+# If Docker Hub times out (TLS handshake), use a mirror:
+#   docker build --build-arg BASE=mirror.gcr.io/library/python:3.11-slim .
+ARG BASE=python:3.11-slim
+FROM ${BASE}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential libpq-dev curl \
