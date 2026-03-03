@@ -260,6 +260,109 @@ export default function PredictionsPage() {
                         )}
                       </div>
                     )}
+
+                    {/* Full maths: features → raw_return → dampened → clamp → price */}
+                    {dayData.predicted_price != null && dayData.predicted_return != null && calendar.model && dayData.features_norm != null && dayData.raw_return != null && dayData.dampened_return != null && dayData.signal_weight != null && dayData.max_daily_move != null && (() => {
+                      const { weights, bias, feature_cols } = calendar.model;
+                      const prevPrice = dayData.predicted_price / Math.exp(dayData.predicted_return);
+                      const terms = feature_cols.map((name, i) => ({ name, w: weights[i], x: dayData.features_norm![i], term: weights[i] * dayData.features_norm![i] }));
+                      const sumTerms = terms.reduce((s, t) => s + t.term, 0);
+                      return (
+                        <div className="mb-4 rounded-xl border border-border bg-surface2 overflow-hidden">
+                          <div className="px-3 py-2 border-b border-border bg-surface/50">
+                            <span className="text-xs font-semibold text-muted uppercase tracking-wider">Calculation</span>
+                          </div>
+                          <div className="p-4 space-y-4">
+                            {/* Step 1: Normalized features */}
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue/20 text-[10px] font-bold text-blue">1</span>
+                                <span className="text-xs font-medium text-muted">Normalized features <span className="font-normal">(z-score)</span></span>
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 font-mono text-[11px] text-muted">
+                                {terms.map((t, i) => (
+                                  <span key={i} className="truncate" title={`${t.name} = ${t.x.toFixed(4)}`}>
+                                    <span className="text-muted/80">{t.name}</span>
+                                    <span className="text-text ml-1">= {t.x.toFixed(4)}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Step 2: raw_return */}
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue/20 text-[10px] font-bold text-blue">2</span>
+                                <span className="text-xs font-medium text-muted">raw_return = Σ(w·x) + bias</span>
+                              </div>
+                              <p className="font-mono text-xs text-muted pl-7">
+                                Σ(w·x) = {sumTerms.toFixed(6)} ; bias = {bias.toFixed(6)} → raw_return = <span className="text-amber-600 dark:text-amber-400 font-medium">{(dayData.raw_return!).toFixed(6)}</span>
+                              </p>
+                            </div>
+
+                            {/* Step 3: Dampening */}
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue/20 text-[10px] font-bold text-blue">3</span>
+                                <span className="text-xs font-medium text-muted">dampened_return</span>
+                              </div>
+                              <p className="font-mono text-xs text-muted pl-7">
+                                {dayData.signal_weight!.toFixed(4)} × raw + (1 − {dayData.signal_weight!.toFixed(4)}) × bias → <span className="text-amber-600 dark:text-amber-400 font-medium">{(dayData.dampened_return!).toFixed(6)}</span>
+                              </p>
+                            </div>
+
+                            {/* Step 4: Clamp */}
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue/20 text-[10px] font-bold text-blue">4</span>
+                                <span className="text-xs font-medium text-muted">clamped_return</span>
+                              </div>
+                              <p className="font-mono text-xs text-muted pl-7">
+                                clamp(·, ±{dayData.max_daily_move!.toFixed(4)}) → <span className="text-amber-600 dark:text-amber-400 font-medium">{(dayData.predicted_return!).toFixed(6)}</span>
+                              </p>
+                            </div>
+
+                            {/* Step 5: Price */}
+                            <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/30 text-[10px] font-bold text-amber-600 dark:text-amber-400">5</span>
+                                <span className="text-xs font-medium text-amber-700 dark:text-amber-300">P_today = P_prev × e^r</span>
+                              </div>
+                              <p className="font-mono text-sm text-amber-700 dark:text-amber-300 pl-7 font-semibold">
+                                {prevPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} × {Math.exp(dayData.predicted_return!).toFixed(6)} = {dayData.predicted_price!.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {/* Fallback when no model/calculation fields (e.g. old calendar) */}
+                    {dayData.predicted_price != null && dayData.predicted_return != null && !(calendar.model && dayData.features_norm != null && dayData.raw_return != null) && (() => {
+                      const r = dayData.predicted_return;
+                      const prevPrice = dayData.predicted_price / Math.exp(r);
+                      const expR = Math.exp(r);
+                      return (
+                        <div className="mb-4 rounded-xl border border-border bg-surface2 overflow-hidden">
+                          <div className="px-3 py-2 border-b border-border bg-surface/50">
+                            <span className="text-xs font-semibold text-muted uppercase tracking-wider">Price calculation</span>
+                          </div>
+                          <div className="p-4">
+                            <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
+                              <p className="font-mono text-xs text-muted space-y-0.5 mb-2">
+                                <span>P_prev = {prevPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                <span className="mx-2">·</span>
+                                <span>r = {r.toFixed(6)}</span>
+                                <span className="mx-2">·</span>
+                                <span>e^r = {expR.toFixed(6)}</span>
+                              </p>
+                              <p className="font-mono text-sm text-amber-700 dark:text-amber-300 font-semibold">
+                                P_today = {prevPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} × {expR.toFixed(6)} = {dayData.predicted_price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
                       Why {dayData.date} → {actionDisplayLabel(dayData.action ?? "–")}
                     </p>

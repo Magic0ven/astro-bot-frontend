@@ -11,8 +11,8 @@ interface Props {
 
 const FRACTION_2 = { minimumFractionDigits: 2 };
 
-const row = (label: string, value: React.ReactNode, valueClass = "text-text") => (
-  <div key={label} className="flex border-b border-border/50 last:border-0">
+const row = (label: string, value: React.ReactNode, valueClass = "text-text", key?: string) => (
+  <div key={key ?? label} className="flex border-b border-border/50 last:border-0">
     <div className="w-40 shrink-0 py-2 pr-4 text-[11px] font-medium text-muted uppercase tracking-wider">
       {label}
     </div>
@@ -63,7 +63,7 @@ export default function FullSignalPanel({ payload, onClose }: Props) {
               ? `$${payload.effective_capital.toLocaleString(undefined, FRACTION_2)}`
               : null
         )}
-        {row("", "")}
+        {row("", "", "text-text", "sep1")}
         {row(
           "Western",
           [payload.western_score, payload.western_medium, payload.western_slope].every((x) => x != null)
@@ -78,7 +78,7 @@ export default function FullSignalPanel({ payload, onClose }: Props) {
         )}
         {row("W Signal", payload.western_signal)}
         {row("V Signal", payload.vedic_signal)}
-        {row("", "")}
+        {row("", "", "text-text", "sep2")}
         {row("Numerology", payload.numerology_label != null ? `${payload.numerology_label}${payload.numerology_mult != null ? ` (${payload.numerology_mult}x)` : ""}` : null)}
         {row("UDN", payload.universal_day_number)}
         {row("Life Path", payload.life_path_number)}
