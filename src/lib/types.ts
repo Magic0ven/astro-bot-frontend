@@ -27,6 +27,10 @@ export interface PredictionsCalendarDay {
   retrograde_vedic?:   string[];
   numerology_label?: string;
   numerology_mult?:  number;
+  /** ML-predicted price for this day (from predict_prices.py + merge_calendar_prices.py) */
+  predicted_price?: number;
+  /** Actual close price when available (historical days only) */
+  actual_close?: number;
 }
 
 export interface PredictionsCalendarResponse {

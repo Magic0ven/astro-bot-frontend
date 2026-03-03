@@ -52,6 +52,12 @@ function actionDisplayLabel(action: string): string {
   return action.replace(/_/g, " ");
 }
 
+function formatPrice(value: number): string {
+  if (value >= 1e6) return `${(value / 1e6).toFixed(2)}M`;
+  if (value >= 1e3) return value.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  return value.toFixed(2);
+}
+
 export default function PredictionsPage() {
   const [userId, setUserId] = useState("default");
   const [selectedMonth, setSelectedMonth] = useState(1);   // January default
@@ -209,6 +215,11 @@ export default function PredictionsPage() {
                                   {actionDisplayLabel(data.action)}
                                 </span>
                               )}
+                              {data.predicted_price != null && (
+                                <span className="text-[10px] text-muted mt-1 mono">
+                                  ${formatPrice(data.predicted_price)}
+                                </span>
+                              )}
                             </>
                           )}
                         </button>
@@ -290,6 +301,22 @@ export default function PredictionsPage() {
                         </p>
                       </div>
                     </div>
+                    {(dayData.predicted_price != null || dayData.actual_close != null) && (
+                      <div className="mt-3 pt-3 border-t border-border grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                        {dayData.predicted_price != null && (
+                          <p>
+                            <span className="text-[11px] text-muted uppercase">Predicted price</span>
+                            <span className="ml-2 font-medium mono">${formatPrice(dayData.predicted_price)}</span>
+                          </p>
+                        )}
+                        {dayData.actual_close != null && (
+                          <p>
+                            <span className="text-[11px] text-muted uppercase">Actual close</span>
+                            <span className="ml-2 font-medium mono">${formatPrice(dayData.actual_close)}</span>
+                          </p>
+                        )}
+                      </div>
+                    )}
                     <p className="text-[11px] text-muted mt-3">
                       Combined Western + Vedic + numerology → {actionDisplayLabel(dayData.action ?? "–")}. Click the day again to close.
                     </p>
