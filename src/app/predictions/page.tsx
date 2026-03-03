@@ -136,7 +136,9 @@ export default function PredictionsPage() {
             <div className="p-4">
               <p className="text-[11px] text-muted mb-4">
                 UDN = Universal Day Number. Resonance = UDN matches asset Life Path (1.5× size days).
-                {calendar.days.some((d) => d.action) && " Prediction = signal from bot (Western + Vedic + numerology). Click a day to see why it’s Buy or Sell."}
+                {calendar.days.some((d) => d.action) && " Prediction = signal from bot (Western + Vedic + numerology). "}
+                {calendar.days.some((d) => d.predicted_price != null) && "Price = predicted price for that day. "}
+                Click a day to see details.
               </p>
 
               {/* Month + Year selector */}
@@ -216,7 +218,7 @@ export default function PredictionsPage() {
                                 </span>
                               )}
                               {data.predicted_price != null && (
-                                <span className="text-[10px] text-muted mt-1 mono">
+                                <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mt-1 mono" title="Predicted price for this day">
                                   ${formatPrice(data.predicted_price)}
                                 </span>
                               )}
@@ -249,6 +251,15 @@ export default function PredictionsPage() {
                 const lifePath = calendar.life_path_number ?? null;
                 return (
                   <div className="mt-4 p-4 rounded-lg border border-border bg-surface2/50">
+                    {dayData.predicted_price != null && (
+                      <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                        <p className="text-[11px] text-muted uppercase tracking-wider mb-0.5">Predicted price for this day</p>
+                        <p className="text-xl font-bold mono text-amber-600 dark:text-amber-400">${formatPrice(dayData.predicted_price)}</p>
+                        {dayData.actual_close != null && (
+                          <p className="text-xs text-muted mt-1">Actual close: ${formatPrice(dayData.actual_close)}</p>
+                        )}
+                      </div>
+                    )}
                     <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
                       Why {dayData.date} → {actionDisplayLabel(dayData.action ?? "–")}
                     </p>
@@ -301,22 +312,6 @@ export default function PredictionsPage() {
                         </p>
                       </div>
                     </div>
-                    {(dayData.predicted_price != null || dayData.actual_close != null) && (
-                      <div className="mt-3 pt-3 border-t border-border grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                        {dayData.predicted_price != null && (
-                          <p>
-                            <span className="text-[11px] text-muted uppercase">Predicted price</span>
-                            <span className="ml-2 font-medium mono">${formatPrice(dayData.predicted_price)}</span>
-                          </p>
-                        )}
-                        {dayData.actual_close != null && (
-                          <p>
-                            <span className="text-[11px] text-muted uppercase">Actual close</span>
-                            <span className="ml-2 font-medium mono">${formatPrice(dayData.actual_close)}</span>
-                          </p>
-                        )}
-                      </div>
-                    )}
                     <p className="text-[11px] text-muted mt-3">
                       Combined Western + Vedic + numerology → {actionDisplayLabel(dayData.action ?? "–")}. Click the day again to close.
                     </p>
