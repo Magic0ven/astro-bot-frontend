@@ -57,18 +57,23 @@ export default function TradingChart({ candles, signals, positions }: Props) {
           }))
         );
 
-        // Trade markers
+        // Only BUY/SELL: green triangle up = buy, red triangle down = sell
+        const isTradeAction = (a: string | undefined) => {
+          if (!a) return false;
+          const u = a.toUpperCase();
+          return u !== "NO_TRADE" && u !== "HOLD" && u !== "COLLECTING_DATA" && (u.includes("BUY") || u.includes("SELL"));
+        };
         const markers = signals
-          .filter((s) => s.entry_price && s.timestamp && s.action)
+          .filter((s) => s.entry_price && s.timestamp && isTradeAction(s.action))
           .map((s) => {
-            const ts  = Math.floor(new Date(s.timestamp).getTime() / 1000) as import("lightweight-charts").Time;
-            const buy = s.action.includes("BUY");
+            const ts  = Math.floor(new Date(s.timestamp!).getTime() / 1000) as import("lightweight-charts").Time;
+            const buy = s.action!.toUpperCase().includes("BUY");
             return {
               time:     ts,
               position: (buy ? "belowBar" : "aboveBar") as import("lightweight-charts").SeriesMarkerPosition,
-              color:    buy ? "#3fb950" : "#f85149",
+              color:    buy ? "#22c55e" : "#ef4444",
               shape:    (buy ? "arrowUp" : "arrowDown") as import("lightweight-charts").SeriesMarkerShape,
-              text:     s.result ?? s.action.replace("_", " "),
+              text:     s.result ?? s.action!.replace("_", " "),
             };
           })
           .sort((a, b) => (a.time as number) - (b.time as number));

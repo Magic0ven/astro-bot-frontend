@@ -117,11 +117,17 @@ export default function ChartPage() {
           </div>
         </div>
 
-        {/* Recent signals table under chart */}
-        {signals.length > 0 && (
+        {/* Plotted Trade Signals: only BUY and SELL */}
+        {(() => {
+          const tradeSignals = signals.filter((s) => {
+            if (!s.entry_price) return false;
+            const a = (s.action ?? "").toUpperCase();
+            return a !== "NO_TRADE" && a !== "HOLD" && a !== "COLLECTING_DATA" && (a.includes("BUY") || a.includes("SELL"));
+          });
+          return tradeSignals.length > 0 ? (
           <div className="rounded-xl border border-border bg-surface p-5">
             <p className="text-xs text-muted font-medium uppercase tracking-wider mb-3">
-              Plotted Trade Signals
+              Plotted Trade Signals <span className="text-muted/80 font-normal">(Buy ▲ / Sell ▼)</span>
             </p>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
@@ -133,7 +139,7 @@ export default function ChartPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {signals.filter(s => s.entry_price).slice(0, 12).map((s, i) => {
+                  {tradeSignals.slice(0, 12).map((s, i) => {
                     const pnl = s.pnl ?? null;
                     return (
                       <tr key={i} className="border-b border-border/40 hover:bg-surface2 transition-colors">
@@ -161,7 +167,8 @@ export default function ChartPage() {
               </table>
             </div>
           </div>
-        )}
+          ) : null;
+        })()}
       </div>
     </>
   );

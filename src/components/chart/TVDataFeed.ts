@@ -24,8 +24,15 @@ function resolutionToTimeframe(resolution: string): string {
   return map[r] ?? "4h";
 }
 
+/** Only BUY/SELL; exclude NO_TRADE, HOLD, COLLECTING_DATA */
+function isTradeAction(action: string | undefined): boolean {
+  if (!action) return false;
+  const u = action.toUpperCase();
+  if (u === "NO_TRADE" || u === "HOLD" || u === "COLLECTING_DATA") return false;
+  return u.includes("BUY") || u.includes("SELL");
+}
 
-export function createTVDataFeed(signalsFetcher?: () => Promise<Array<{ timestamp?: string; action?: string; entry_price?: number; result?: string }>>): TVDatafeed {
+export function createTVDataFeed(signalsFetcher?: () => Promise<Array<{ id?: number; timestamp?: string; action?: string; entry_price?: number; result?: string }>>): TVDatafeed {
   const supportedResolutions = Object.values(TV_RESOLUTIONS);
 
   return {
@@ -87,17 +94,17 @@ export function createTVDataFeed(signalsFetcher?: () => Promise<Array<{ timestam
       signalsFetcher()
         .then((signals) => {
           const marks = signals
-            .filter((s) => s.timestamp && s.entry_price && s.action)
-            .flatMap((s, i) => {
+            .filter((s) => s.timestamp && s.entry_price && isTradeAction(s.action))
+            .flatMap((s) => {
               const ts = Math.floor(new Date(s.timestamp!).getTime() / 1000);
               if (ts < from || ts > to) return [];
-              const buy = s.action?.toUpperCase().includes("BUY");
+              const buy = s.action!.toUpperCase().includes("BUY");
               return [{
-                id: i,
+                id: s.id ?? 0,
                 time: ts,
-                color: buy ? "#3fb950" : "#f85149",
+                color: buy ? "green" : "red",
                 text: s.result ?? s.action ?? "",
-                label: buy ? "B" : "S",
+                label: buy ? "▲" : "▼",
                 labelFontColor: "#fff",
               }];
             })
