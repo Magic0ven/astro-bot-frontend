@@ -1,15 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import dynamic from "next/dynamic";
+import Script from "next/script";
 import { fetcher } from "@/lib/api";
 import Header from "@/components/layout/Header";
+import ChartHeader from "@/components/chart/ChartHeader";
+import TVChartContainer from "@/components/chart/TVChartContainer";
 import type { OHLCVCandle, Signal, Position } from "@/lib/types";
 import { ACTION_BG } from "@/lib/types";
+import { CHARTING_LIBRARY_STANDALONE } from "@/lib/tv-constants";
 import clsx from "clsx";
 
-const TradingChart = dynamic(() => import("@/components/chart/TradingChart"), {
+const LightweightTradingChart = dynamic(() => import("@/components/chart/TradingChart"), {
   ssr: false,
   loading: () => (
     <div className="w-full h-[480px] bg-surface2 rounded-b-xl flex items-center justify-center">
@@ -23,6 +27,13 @@ const TIMEFRAMES = ["1h", "4h", "1d"];
 export default function ChartPage() {
   const [userId, setUserId] = useState("default");
   const [tf, setTf]         = useState("4h");
+  const [isTvLibraryReady, setIsTvLibraryReady] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && Boolean(window.TradingView?.widget)) {
+      setIsTvLibraryReady(true);
+    }
+  }, []);
 
   const { data: candles = [] }   = useSWR<OHLCVCandle[]>(
     `/api/ohlcv?symbol=BTC%2FUSDT&timeframe=${tf}&limit=500`, fetcher,
@@ -42,6 +53,12 @@ export default function ChartPage() {
 
   return (
     <>
+      <Script
+        src={CHARTING_LIBRARY_STANDALONE}
+        strategy="afterInteractive"
+        onLoad={() => setIsTvLibraryReady(Boolean(window.TradingView?.widget))}
+        onError={() => setIsTvLibraryReady(false)}
+      />
       <Header title="Chart" userId={userId} onUserChange={setUserId} />
       <div className="flex-1 p-6 space-y-4">
 
@@ -83,17 +100,21 @@ export default function ChartPage() {
 
         {/* Chart */}
         <div className="rounded-xl border border-border bg-surface overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <p className="text-xs text-muted">
-              BTC/USDT · {tf.toUpperCase()} · Markers = trade entries
-            </p>
-            <div className="flex items-center gap-4 text-[11px]">
-              <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-green inline-block rounded" />Buy entry</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-red inline-block rounded" />Sell entry</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-blue border-dashed border-b inline-block" />Open position</span>
-            </div>
+          <ChartHeader symbol="BTC/USDT" price={latestCandle?.close} changePct={priceDiff} />
+          <div className="h-[640px]">
+            {isTvLibraryReady ? (
+              <TVChartContainer
+                symbol="BTC/USDT"
+                timeframe={tf}
+                onTimeframeChange={setTf}
+                isLibraryReady={isTvLibraryReady}
+                className="w-full h-full rounded-b-xl"
+                signalsUrl={`/api/users/${userId}/signals?limit=200`}
+              />
+            ) : (
+              <LightweightTradingChart candles={candles} signals={signals} positions={positions} />
+            )}
           </div>
-          <TradingChart candles={candles} signals={signals} positions={positions} />
         </div>
 
         {/* Recent signals table under chart */}

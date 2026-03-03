@@ -286,67 +286,174 @@ def get_latest_signal(user_id: str):
     return rows[0] if rows else {}
 
 
+def _urlopen_no_ssl_verify(req, timeout=15):
+    """Open URL with optional SSL verification disabled (for macOS cert issues in dev)."""
+    import ssl
+    import urllib.request as urlreq
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return urlreq.urlopen(req, timeout=timeout, context=ctx)
+
+
+# Hyperliquid returns max 500 candles per request; we paginate by time window
+HL_CANDLES_CHUNK = 500
+
+
+def _fetch_ohlcv_hyperliquid(coin: str, hl_interval: str, start_ms: int, end_ms: int, _num):
+    import urllib.request as urlreq
+    interval_ms = {
+        "1m": 60_000, "5m": 300_000, "15m": 900_000, "30m": 1_800_000,
+        "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000,
+    }.get(hl_interval, 14_400_000)
+    chunk_ms = HL_CANDLES_CHUNK * interval_ms
+    all_out = []
+    current_end = end_ms
+    while current_end > start_ms:
+        current_start = max(start_ms, current_end - chunk_ms)
+        payload = json.dumps({
+            "type": "candleSnapshot",
+            "req": {"coin": coin, "interval": hl_interval, "startTime": current_start, "endTime": current_end},
+        }).encode()
+        req = urlreq.Request(
+            "https://api.hyperliquid.xyz/info",
+            data=payload,
+            headers={"Content-Type": "application/json", "User-Agent": "AstroBot-Dashboard/1.0"},
+            method="POST",
+        )
+        with _urlopen_no_ssl_verify(req, 15) as resp:
+            raw = json.loads(resp.read().decode())
+        if not isinstance(raw, list):
+            raise ValueError(f"Unexpected shape: {type(raw).__name__}")
+        out = []
+        for c in raw:
+            if not isinstance(c, dict):
+                continue
+            ts = c.get("t") or c.get("T")
+            if ts is None:
+                continue
+            out.append({
+                "time": int(ts / 1000) if ts > 1e12 else int(ts),
+                "open": _num(c.get("o", 0)), "high": _num(c.get("h", 0)),
+                "low": _num(c.get("l", 0)), "close": _num(c.get("c", 0)),
+                "volume": _num(c.get("v", 0)),
+            })
+        if not out:
+            break
+        all_out = out + all_out
+        current_end = out[0]["time"] * 1000 - 1
+    return all_out
+
+
+def _fetch_ohlcv_binance(coin: str, interval: str, limit: int, start_ms: int = 0):
+    import urllib.request as urlreq
+    sym = coin + "USDT"
+    chunk = 1000  # Binance max per request
+    all_rows = []
+    end_ms = int(__import__("time").time() * 1000)
+    fetch_start = start_ms if start_ms > 0 else None
+    while len(all_rows) < limit:
+        url = (
+            "https://api.binance.com/api/v3/klines"
+            f"?symbol={sym}&interval={interval}&limit={chunk}&endTime={end_ms}"
+        )
+        if fetch_start is not None:
+            url += f"&startTime={fetch_start}"
+        req = urlreq.Request(
+            url,
+            method="GET",
+            headers={"User-Agent": "Mozilla/5.0 (compatible; AstroBot/1.0)"},
+        )
+        with _urlopen_no_ssl_verify(req, 15) as resp:
+            raw = json.loads(resp.read().decode())
+        if not isinstance(raw, list) or not raw:
+            break
+        if fetch_start is not None:
+            # Fixed range: fetch forward (oldest first), append
+            all_rows.extend(raw)
+            if len(raw) < chunk:
+                break
+            fetch_start = raw[-1][0] + 1
+            if fetch_start >= end_ms:
+                break
+            if len(all_rows) >= limit:
+                all_rows = all_rows[:limit]
+                break
+        else:
+            # Backward from now
+            all_rows = raw + all_rows
+            if len(raw) < chunk:
+                break
+            end_ms = raw[0][0] - 1
+            if len(all_rows) >= limit:
+                all_rows = all_rows[-limit:]
+                break
+    return [
+        {
+            "time": int(row[0] / 1000),
+            "open": float(row[1]), "high": float(row[2]),
+            "low": float(row[3]), "close": float(row[4]),
+            "volume": float(row[5]),
+        }
+        for row in all_rows
+    ]
+
+
+# Fixed range start: 2025-01-01 00:00:00 UTC
+OHLCV_START_TIMESTAMP = 1735689600
+
+
 @app.get("/api/ohlcv")
-def get_ohlcv(symbol: str = "BTC/USDT", timeframe: str = "4h", limit: int = 500):
+def get_ohlcv(
+    symbol: str = "BTC/USDT",
+    timeframe: str = "4h",
+    limit: int = 2000,
+    start_time: Optional[int] = None,
+):
     """
-    Fetches OHLCV candles from Hyperliquid's public API.
-    Hyperliquid has no geo-restrictions and is the exchange the bot actually trades on.
+    Fetches OHLCV candles from start_time to now (or last `limit` bars if no start_time).
+    Tries Hyperliquid first; on failure falls back to Binance.
     """
     import time
-    import urllib.request as urlreq
 
-    # Extract coin name from symbol (BTC/USDT → BTC)
     coin = symbol.split("/")[0]
-
-    # Map timeframe to Hyperliquid interval string
     hl_interval = {
         "1m": "1m", "5m": "5m", "15m": "15m", "30m": "30m",
         "1h": "1h", "4h": "4h", "1d": "1d",
     }.get(timeframe, "4h")
-
-    # Calculate time window
     interval_ms = {
-        "1m": 60_000,      "5m": 300_000,    "15m": 900_000,
-        "30m": 1_800_000,  "1h": 3_600_000,  "4h": 14_400_000,
-        "1d": 86_400_000,
+        "1m": 60_000, "5m": 300_000, "15m": 900_000, "30m": 1_800_000,
+        "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000,
     }.get(timeframe, 14_400_000)
+    end_ms = int(time.time() * 1000)
+    if start_time is not None:
+        start_ms = int(start_time) * 1000
+        # Cap number of bars to avoid timeouts (e.g. 50k bars max)
+        max_bars = 50000
+        start_ms = max(start_ms, end_ms - max_bars * interval_ms)
+    else:
+        start_ms = end_ms - limit * interval_ms
 
-    end_ms   = int(time.time() * 1000)
-    start_ms = end_ms - limit * interval_ms
+    def _num(x):
+        return float(x) if isinstance(x, str) else float(x)
 
-    payload = json.dumps({
-        "type": "candleSnapshot",
-        "req": {
-            "coin":      coin,
-            "interval":  hl_interval,
-            "startTime": start_ms,
-            "endTime":   end_ms,
-        }
-    }).encode()
+    err1 = None
+    try:
+        return _fetch_ohlcv_hyperliquid(coin, hl_interval, start_ms, end_ms, _num)
+    except Exception as e:
+        err1 = e
 
     try:
-        req = urlreq.Request(
-            "https://api.hyperliquid.xyz/info",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urlreq.urlopen(req, timeout=15) as resp:
-            raw = json.loads(resp.read())
-
-        return [
-            {
-                "time":   int(c["t"] / 1000),
-                "open":   float(c["o"]),
-                "high":   float(c["h"]),
-                "low":    float(c["l"]),
-                "close":  float(c["c"]),
-                "volume": float(c["v"]),
-            }
-            for c in raw
-        ]
+        binance_interval = {"1h": "1h", "4h": "4h", "1d": "1d"}.get(timeframe, "4h")
+        # When using fixed range, request enough to cover start_ms→end_ms
+        limit_binance = limit if start_time is None else max(limit, (end_ms - start_ms) // interval_ms + 100)
+        limit_binance = min(limit_binance, 50000)
+        return _fetch_ohlcv_binance(coin, binance_interval, limit_binance, start_ms if start_time is not None else 0)
     except Exception as e:
-        raise HTTPException(500, f"Hyperliquid OHLCV error: {e}")
+        msg = str(e).replace("\n", " ")
+        if err1:
+            raise HTTPException(500, f"OHLCV: Hyperliquid failed ({err1!s}); Binance failed ({msg})")
+        raise HTTPException(500, f"OHLCV error: {msg}")
 
 
 @app.get("/api/ticker")
@@ -364,12 +471,79 @@ def get_ticker():
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urlreq.urlopen(req, timeout=10) as resp:
-            raw = json.loads(resp.read())
-        # Convert string values to float for frontend
+        with _urlopen_no_ssl_verify(req, 10) as resp:
+            raw = json.loads(resp.read().decode())
         return {k: float(v) for k, v in raw.items()}
     except Exception as e:
         raise HTTPException(500, f"Hyperliquid ticker error: {e}")
+
+
+@app.get("/api/market-stats")
+def get_market_stats(symbol: str = "BTC"):
+    """
+    Returns market stats for the chart header: price, 24h volume, open interest, funding, impact.
+    Uses Hyperliquid metaAndAssetCtxs; symbol should be the perp name (e.g. BTC, ETH).
+    """
+    import urllib.request as urlreq
+    coin = symbol.upper().replace("/USDT", "").replace("/", "").strip() or "BTC"
+    payload = json.dumps({"type": "metaAndAssetCtxs"}).encode()
+    try:
+        req = urlreq.Request(
+            "https://api.hyperliquid.xyz/info",
+            data=payload,
+            headers={"Content-Type": "application/json", "User-Agent": "AstroBot-Dashboard/1.0"},
+            method="POST",
+        )
+        with _urlopen_no_ssl_verify(req, 10) as resp:
+            raw = json.loads(resp.read().decode())
+    except Exception as e:
+        raise HTTPException(500, f"Market stats error: {e}")
+    if not isinstance(raw, list) or len(raw) < 2:
+        raise HTTPException(502, "Invalid metaAndAssetCtxs response")
+    meta, asset_ctxs = raw[0], raw[1]
+    universe = meta.get("universe") if isinstance(meta, dict) else []
+    if not isinstance(universe, list) or not isinstance(asset_ctxs, list) or len(asset_ctxs) != len(universe):
+        raise HTTPException(502, "Universe/context length mismatch")
+    idx = None
+    for i, u in enumerate(universe):
+        if isinstance(u, dict) and (u.get("name") or "").upper() == coin:
+            idx = i
+            break
+    if idx is None:
+        raise HTTPException(404, f"Symbol {symbol} not found in Hyperliquid meta")
+    ctx = asset_ctxs[idx]
+    if not isinstance(ctx, dict):
+        raise HTTPException(502, "Invalid asset context")
+    def _f(k, default=0):
+        v = ctx.get(k, default)
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+    mid = _f("midPx")
+    prev = _f("prevDayPx")
+    change_pct = ((mid - prev) / prev * 100) if prev and prev != 0 else 0.0
+    oi_base = _f("openInterest")
+    oi_usd = oi_base * mid if mid else 0
+    day_ntl = _f("dayNtlVlm")
+    funding = _f("funding")
+    impact = ctx.get("impactPxs")
+    if isinstance(impact, list) and len(impact) >= 2:
+        impact_buy = float(impact[0]) if impact[0] is not None else 0
+        impact_sell = float(impact[1]) if impact[1] is not None else 0
+    else:
+        impact_buy = impact_sell = 0
+    return {
+        "price": mid,
+        "prevDayPx": prev,
+        "changePct": round(change_pct, 2),
+        "volume24h": day_ntl,
+        "openInterestUsd": round(oi_usd, 2),
+        "openInterestBase": oi_base,
+        "funding": funding,
+        "fundingPct": round(funding * 100, 4),
+        "impactPxs": [impact_buy, impact_sell],
+    }
 
 
 # ── Prediction calendar (static JSON) ─────────────────────────────────────────
