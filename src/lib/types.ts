@@ -5,43 +5,43 @@ export interface User {
   color:   string;
 }
 
-/** Single day in the predictions calendar (numerology + optional full prediction) */
+/** Single day in the predictions calendar (astrology + optional price prediction) */
 export interface PredictionsCalendarDay {
   date:           string;
-  udn:            number;
-  resonance:      boolean;
-  multiplier:     number;
-  label:          string;
-  /** From bot script: STRONG_BUY, WEAK_SELL, HOLD, etc. */
-  action?:        string;
+  /** Astrology: lunar mansion */
+  nakshatra?:     string;
+  /** Planets in retrograde (Western tropical) */
+  retrograde_western?: string[];
+  /** Planets in retrograde (Vedic sidereal) */
+  retrograde_vedic?:   string[];
+  /** Price prediction: median (display primary) */
+  pred_median?:   number;
+  pred_low?:      number;
+  pred_high?:     number;
+  /** Legacy: numerology / bot signal fields (optional) */
+  udn?:           number;
+  resonance?:     boolean;
+  multiplier?:   number;
+  label?:        string;
+  action?:       string;
   western_score?: number;
   vedic_score?:   number;
-   western_medium?: number;
-   vedic_medium?:   number;
-   western_slope?:  number;
-   vedic_slope?:    number;
+  western_medium?: number;
+  vedic_medium?:   number;
+  western_slope?:  number;
+  vedic_slope?:    number;
   western_signal?: string;
   vedic_signal?:  string;
-  nakshatra?:     string;
-  retrograde_western?: string[];
-  retrograde_vedic?:   string[];
   numerology_label?: string;
   numerology_mult?:  number;
-  /** ML-predicted price for this day (from predict_prices.py + merge_calendar_prices.py) */
+  /** Legacy: single predicted price */
   predicted_price?: number;
-  /** Predicted daily log-return used to get predicted_price (previous_price × e^return) */
   predicted_return?: number;
-  /** Raw model output (before dampening) */
   raw_return?: number;
-  /** After dampening: signal_weight * raw_return + (1 - signal_weight) * bias */
   dampened_return?: number;
-  /** Dampening factor in [0,1] */
   signal_weight?: number;
-  /** Max absolute log-return (clamp bound) */
   max_daily_move?: number;
-  /** Normalized feature vector (same order as model.feature_cols) */
   features_norm?: number[];
-  /** Actual close price when available (historical days only) */
   actual_close?: number;
 }
 

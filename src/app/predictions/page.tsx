@@ -114,7 +114,9 @@ export default function PredictionsPage() {
             </div>
             {calendar && !calendar.unavailable && calendar.asset && (
               <span className="text-[11px] text-muted">
-                {calendar.asset} · Life Path {calendar.life_path_number} · {calendar.from} → {calendar.to}
+                {calendar.asset}
+                {calendar.life_path_number != null && ` · Life Path ${calendar.life_path_number}`}
+                {calendar.from && calendar.to && ` · ${calendar.from} → ${calendar.to}`}
               </span>
             )}
           </div>
@@ -135,10 +137,9 @@ export default function PredictionsPage() {
           {calendar && !calendarLoading && !calendar.unavailable && calendar.days?.length > 0 && (
             <div className="p-4">
               <p className="text-[11px] text-muted mb-4">
-                UDN = Universal Day Number. Resonance = UDN matches asset Life Path (1.5× size days).
-                {calendar.days.some((d) => d.action) && " Prediction = signal from bot (Western + Vedic + numerology). "}
-                {calendar.days.some((d) => d.predicted_price != null) && "Price = predicted price for that day. "}
-                Click a day to see details.
+                {calendar.days.some((d) => d.pred_median != null || d.predicted_price != null) && "Price = predicted price (median or range) for that day. "}
+                {calendar.days.some((d) => d.action) && "Signal = from bot (Western + Vedic + numerology). "}
+                Click a day to see astrology and price detail.
               </p>
 
               {/* Month + Year selector */}
@@ -177,7 +178,8 @@ export default function PredictionsPage() {
                     const dayMap = new Map<string, PredictionsCalendarDay>();
                     for (const d of calendar.days) dayMap.set(d.date, d);
                     const cells = buildMonthGrid(selectedYear, selectedMonth);
-                    const hasPrediction = calendar.days.some((d) => d.action);
+                    const hasAction = calendar.days.some((d) => d.action);
+                    const priceForDay = (d: PredictionsCalendarDay) => d.pred_median ?? d.predicted_price ?? null;
                     return cells.map((dayNum, idx) => {
                       if (dayNum === null) {
                         return <div key={`e-${idx}`} className="min-h-[88px] p-2 border-b border-r border-border/50 bg-surface/50" />;
@@ -185,6 +187,7 @@ export default function PredictionsPage() {
                       const key = dateKey(selectedYear, selectedMonth, dayNum);
                       const data = dayMap.get(key);
                       const isSelected = selectedDayKey === key;
+                      const price = data ? priceForDay(data) : null;
                       return (
                         <button
                           key={key}
@@ -200,11 +203,13 @@ export default function PredictionsPage() {
                           <span className="text-sm font-semibold text-muted">{dayNum}</span>
                           {data && (
                             <>
-                              <span className="text-[10px] mono font-semibold mt-0.5">UDN {data.udn}</span>
-                              <span className={clsx("text-[10px] mt-0.5", data.resonance ? "text-green font-medium" : "text-muted")}>
-                                {data.resonance ? "1.5×" : "1.0×"}
-                              </span>
-                              {hasPrediction && data.action && (
+                              {data.udn != null && <span className="text-[10px] mono font-semibold mt-0.5">UDN {data.udn}</span>}
+                              {data.resonance != null && (
+                                <span className={clsx("text-[10px] mt-0.5", data.resonance ? "text-green font-medium" : "text-muted")}>
+                                  {data.resonance ? "1.5×" : "1.0×"}
+                                </span>
+                              )}
+                              {hasAction && data.action && (
                                 <span
                                   className={clsx(
                                     "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold mono mt-1 w-fit",
@@ -217,9 +222,9 @@ export default function PredictionsPage() {
                                   {actionDisplayLabel(data.action)}
                                 </span>
                               )}
-                              {data.predicted_price != null && (
+                              {price != null && (
                                 <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mt-1 mono" title="Predicted price for this day">
-                                  ${formatPrice(data.predicted_price)}
+                                  ${formatPrice(price)}
                                 </span>
                               )}
                             </>
@@ -251,18 +256,29 @@ export default function PredictionsPage() {
                 const lifePath = calendar.life_path_number ?? null;
                 return (
                   <div className="mt-4 p-4 rounded-lg border border-border bg-surface2/50">
-                    {dayData.predicted_price != null && (
+                    {(dayData.pred_median != null || dayData.predicted_price != null) && (
                       <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
                         <p className="text-[11px] text-muted uppercase tracking-wider mb-0.5">Predicted price for this day</p>
-                        <p className="text-xl font-bold mono text-amber-600 dark:text-amber-400">${formatPrice(dayData.predicted_price)}</p>
+                        {dayData.pred_median != null ? (
+                          <>
+                            <p className="text-xl font-bold mono text-amber-600 dark:text-amber-400">${formatPrice(dayData.pred_median)}</p>
+                            {(dayData.pred_low != null || dayData.pred_high != null) && (
+                              <p className="text-xs text-muted mt-1">
+                                Range: ${formatPrice(dayData.pred_low ?? dayData.pred_median)} – ${formatPrice(dayData.pred_high ?? dayData.pred_median)}
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-xl font-bold mono text-amber-600 dark:text-amber-400">${formatPrice(dayData.predicted_price!)}</p>
+                        )}
                         {dayData.actual_close != null && (
                           <p className="text-xs text-muted mt-1">Actual close: ${formatPrice(dayData.actual_close)}</p>
                         )}
                       </div>
                     )}
 
-                    {/* Full maths: features → raw_return → dampened → clamp → price */}
-                    {dayData.predicted_price != null && dayData.predicted_return != null && calendar.model && dayData.features_norm != null && dayData.raw_return != null && dayData.dampened_return != null && dayData.signal_weight != null && dayData.max_daily_move != null && (() => {
+                    {/* Full maths: only for legacy format (no pred_median); hide for new astrology-only calendar */}
+                    {dayData.pred_median == null && dayData.predicted_price != null && dayData.predicted_return != null && calendar.model && dayData.features_norm != null && dayData.raw_return != null && dayData.dampened_return != null && dayData.signal_weight != null && dayData.max_daily_move != null && (() => {
                       const { weights, bias, feature_cols } = calendar.model;
                       const prevPrice = dayData.predicted_price / Math.exp(dayData.predicted_return);
                       const terms = feature_cols.map((name, i) => ({ name, w: weights[i], x: dayData.features_norm![i], term: weights[i] * dayData.features_norm![i] }));
@@ -336,8 +352,8 @@ export default function PredictionsPage() {
                         </div>
                       );
                     })()}
-                    {/* Fallback when no model/calculation fields (e.g. old calendar) */}
-                    {dayData.predicted_price != null && dayData.predicted_return != null && !(calendar.model && dayData.features_norm != null && dayData.raw_return != null) && (() => {
+                    {/* Fallback when no model/calculation fields (legacy calendar only; never for pred_median format) */}
+                    {dayData.pred_median == null && dayData.predicted_price != null && dayData.predicted_return != null && !(calendar.model && dayData.features_norm != null && dayData.raw_return != null) && (() => {
                       const r = dayData.predicted_return;
                       const prevPrice = dayData.predicted_price / Math.exp(r);
                       const expR = Math.exp(r);
@@ -363,58 +379,83 @@ export default function PredictionsPage() {
                         </div>
                       );
                     })()}
-                    <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
-                      Why {dayData.date} → {actionDisplayLabel(dayData.action ?? "–")}
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-                      <div>
-                        <p className="text-[11px] text-muted uppercase mb-0.5">Western</p>
-                        <p className="font-medium">
-                          {wScore.toFixed(4)}{" "}
-                          {wMed != null && wSlope != null && (
-                            <span className="text-[11px] text-muted font-normal">
-                              (med: {wMed.toFixed(4)} slope: {wSlope >= 0 ? "+" : ""}
-                              {wSlope.toFixed(4)})
-                            </span>
-                          )}
+                    {/* Astrology: for new calendar (pred_median) show only this; for legacy show below as well */}
+                    {(dayData.pred_median != null || naks !== "–" || retroW.length > 0 || retroV.length > 0) && (
+                      <>
+                        <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Astrology</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                          <div>
+                            <p className="text-[11px] text-muted uppercase mb-0.5">Nakshatra</p>
+                            <p className="font-medium">{naks}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] text-muted uppercase mb-0.5">Retrograde (Western)</p>
+                            <p className="font-medium">{retroW.length ? retroW.join(", ") : "None"}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] text-muted uppercase mb-0.5">Retrograde (Vedic)</p>
+                            <p className="font-medium">{retroV.length ? retroV.join(", ") : "None"}</p>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    {/* Legacy: "Why this signal" + Western/Vedic/Numerology when we have action or scores */}
+                    {(dayData.action != null || dayData.western_score != null || dayData.vedic_score != null || dayData.udn != null) && (
+                      <>
+                        <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3 mt-4">
+                          Why {dayData.date} → {actionDisplayLabel(dayData.action ?? "–")}
                         </p>
-                        <p className="text-[11px] text-muted">W Signal: {wSig}</p>
-                      </div>
-                      <div>
-                        <p className="text-[11px] text-muted uppercase mb-0.5">Vedic</p>
-                        <p className="font-medium">
-                          {vScore.toFixed(4)}{" "}
-                          {vMed != null && vSlope != null && (
-                            <span className="text-[11px] text-muted font-normal">
-                              (med: {vMed.toFixed(4)} slope: {vSlope >= 0 ? "+" : ""}
-                              {vSlope.toFixed(4)})
-                            </span>
-                          )}
-                        </p>
-                        <p className="text-[11px] text-muted">V Signal: {vSig}</p>
-                      </div>
-                      <div>
-                        <p className="text-[11px] text-muted uppercase mb-0.5">Nakshatra</p>
-                        <p className="font-medium">{naks}</p>
-                      </div>
-                      <div>
-                        <p className="text-[11px] text-muted uppercase mb-0.5">Numerology</p>
-                        <p className="font-medium">
-                          {numLabel || (dayData.resonance ? "Resonance Day" : "Normal Day")}{" "}
-                          ({numMult.toFixed(1)}x)
-                        </p>
-                        <p className="text-[11px] text-muted mt-0.5">UDN {dayData.udn}</p>
-                        {lifePath != null && (
-                          <p className="text-[11px] text-muted">Life Path {lifePath}</p>
-                        )}
-                        <p className="text-[11px] text-muted mt-1">
-                          Retrograde (W): {retroW.length ? retroW.join(", ") : "None"}
-                        </p>
-                        <p className="text-[11px] text-muted">
-                          Retrograde (V): {retroV.length ? retroV.join(", ") : "None"}
-                        </p>
-                      </div>
-                    </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                          <div>
+                            <p className="text-[11px] text-muted uppercase mb-0.5">Western</p>
+                            <p className="font-medium">
+                              {wScore.toFixed(4)}{" "}
+                              {wMed != null && wSlope != null && (
+                                <span className="text-[11px] text-muted font-normal">
+                                  (med: {wMed.toFixed(4)} slope: {wSlope >= 0 ? "+" : ""}
+                                  {wSlope.toFixed(4)})
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-[11px] text-muted">W Signal: {wSig}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] text-muted uppercase mb-0.5">Vedic</p>
+                            <p className="font-medium">
+                              {vScore.toFixed(4)}{" "}
+                              {vMed != null && vSlope != null && (
+                                <span className="text-[11px] text-muted font-normal">
+                                  (med: {vMed.toFixed(4)} slope: {vSlope >= 0 ? "+" : ""}
+                                  {vSlope.toFixed(4)})
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-[11px] text-muted">V Signal: {vSig}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] text-muted uppercase mb-0.5">Nakshatra</p>
+                            <p className="font-medium">{naks}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] text-muted uppercase mb-0.5">Numerology</p>
+                            <p className="font-medium">
+                              {numLabel || (dayData.resonance ? "Resonance Day" : "Normal Day")}{" "}
+                              ({numMult.toFixed(1)}x)
+                            </p>
+                            <p className="text-[11px] text-muted mt-0.5">UDN {dayData.udn}</p>
+                            {lifePath != null && (
+                              <p className="text-[11px] text-muted">Life Path {lifePath}</p>
+                            )}
+                            <p className="text-[11px] text-muted mt-1">
+                              Retrograde (W): {retroW.length ? retroW.join(", ") : "None"}
+                            </p>
+                            <p className="text-[11px] text-muted">
+                              Retrograde (V): {retroV.length ? retroV.join(", ") : "None"}
+                            </p>
+                          </div>
+                        </div>
+                      </>
+                    )}
                     <p className="text-[11px] text-muted mt-3">
                       Combined Western + Vedic + numerology → {actionDisplayLabel(dayData.action ?? "–")}. Click the day again to close.
                     </p>
