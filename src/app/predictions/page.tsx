@@ -139,7 +139,7 @@ export default function PredictionsPage() {
               <p className="text-[11px] text-muted mb-4">
                 {calendar.days.some((d) => d.pred_median != null || d.predicted_price != null) && "Price = predicted price (median or range) for that day. "}
                 {calendar.days.some((d) => d.action) && "Signal = from bot (Western + Vedic + numerology). "}
-                Click a day to see astrology and price detail.
+                Click a day to see all signals (buy/sell), astrology, and price for that day.
               </p>
 
               {/* Month + Year selector */}
@@ -256,6 +256,75 @@ export default function PredictionsPage() {
                 const lifePath = calendar.life_path_number ?? null;
                 return (
                   <div className="mt-4 p-4 rounded-lg border border-border bg-surface2/50">
+                    {/* Signals for this day — shown when user clicks a calendar date */}
+                    <div className="mb-4 rounded-xl border border-border bg-surface2 overflow-hidden">
+                      <div className="px-3 py-2 border-b border-border bg-surface/50 flex items-center justify-between">
+                        <span className="text-xs font-semibold text-muted uppercase tracking-wider">Signals for {selectedDayKey}</span>
+                        {dayData.action && (
+                          <span
+                            className={clsx(
+                              "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold mono",
+                              ACTION_BG[dayData.action] ?? "bg-surface2 text-muted border border-border"
+                            )}
+                          >
+                            {dayData.action.includes("BUY") && <TrendingUp size={10} />}
+                            {dayData.action.includes("SELL") && <TrendingDown size={10} />}
+                            {!dayData.action.includes("BUY") && !dayData.action.includes("SELL") && dayData.action !== "COLLECTING_DATA" && <Minus size={10} />}
+                            {actionDisplayLabel(dayData.action)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="p-4 space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-[11px] text-muted uppercase mb-0.5">Western</p>
+                            <p className="font-medium">
+                              Score {wScore.toFixed(4)}
+                              {wMed != null && wSlope != null && (
+                                <span className="text-[11px] text-muted font-normal ml-1">
+                                  (med: {wMed.toFixed(4)} slope: {wSlope >= 0 ? "+" : ""}{wSlope.toFixed(4)})
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-[11px] text-muted">Signal: {wSig || "–"}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] text-muted uppercase mb-0.5">Vedic</p>
+                            <p className="font-medium">
+                              Score {vScore.toFixed(4)}
+                              {vMed != null && vSlope != null && (
+                                <span className="text-[11px] text-muted font-normal ml-1">
+                                  (med: {vMed.toFixed(4)} slope: {vSlope >= 0 ? "+" : ""}{vSlope.toFixed(4)})
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-[11px] text-muted">Signal: {vSig || "–"}</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                          <div>
+                            <p className="text-[11px] text-muted uppercase mb-0.5">Nakshatra</p>
+                            <p className="font-medium">{naks}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] text-muted uppercase mb-0.5">Retrograde (Western)</p>
+                            <p className="font-medium">{retroW.length ? retroW.join(", ") : "None"}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] text-muted uppercase mb-0.5">Retrograde (Vedic)</p>
+                            <p className="font-medium">{retroV.length ? retroV.join(", ") : "None"}</p>
+                          </div>
+                        </div>
+                        <div className="text-sm">
+                          <p className="text-[11px] text-muted uppercase mb-0.5">Numerology</p>
+                          <p className="font-medium">{numLabel || "–"} ({numMult.toFixed(1)}×)</p>
+                          {dayData.udn != null && (
+                            <p className="text-[11px] text-muted mt-0.5">UDN {dayData.udn}{lifePath != null ? ` · Life Path ${lifePath}` : ""}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
                     {(dayData.pred_median != null || dayData.predicted_price != null) && (
                       <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
                         <p className="text-[11px] text-muted uppercase tracking-wider mb-0.5">Predicted price for this day</p>
