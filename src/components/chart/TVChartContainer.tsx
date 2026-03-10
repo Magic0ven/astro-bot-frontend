@@ -1,13 +1,20 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createTVDataFeed } from "./TVDataFeed";
 import { CHARTING_LIBRARY_PATH } from "@/lib/tv-constants";
-import type { TVWidget } from "@/lib/tv-types";
+import type { TVChartApi, TVWidget } from "@/lib/tv-types";
+import type { Signal } from "@/lib/types";
 
 const API = typeof window !== "undefined"
   ? (process.env.NEXT_PUBLIC_API_URL || window.location.origin)
   : "http://localhost:8000";
+
+function isTradeAction(action: string | undefined): boolean {
+  if (!action) return false;
+  const u = action.toUpperCase();
+  return u !== "NO_TRADE" && u !== "HOLD" && u !== "COLLECTING_DATA" && (u.includes("BUY") || u.includes("SELL"));
+}
 
 interface TVChartContainerProps {
   symbol: string;
@@ -16,6 +23,8 @@ interface TVChartContainerProps {
   className?: string;
   signalsUrl?: string;
   isLibraryReady?: boolean;
+  /** Single selected signal to project Entry/SL/TP when user clicks a row */
+  selectedSignal?: Signal | null;
 }
 
 export default function TVChartContainer({
@@ -25,9 +34,13 @@ export default function TVChartContainer({
   className = "",
   signalsUrl,
   isLibraryReady = false,
+  selectedSignal = null,
 }: TVChartContainerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetRef = useRef<TVWidget | null>(null);
+  const chartRef = useRef<TVChartApi | null>(null);
+  const shapeIdsRef = useRef<unknown[]>([]);
+  const [chartReady, setChartReady] = useState(false);
 
   useEffect(() => {
     if (
@@ -61,7 +74,7 @@ export default function TVChartContainer({
       autosize: true,
       disabled_features: [
         "use_localstorage_for_settings",
-        "study_templates", // avoids /undefined/undefined/study_templates 404 (no storage backend)
+        "study_templates",
       ],
       enabled_features: [
         "header_widget",
@@ -94,15 +107,74 @@ export default function TVChartContainer({
     widget.onChartReady?.(() => {
       try {
         const chart = widget.activeChart?.();
-        if (chart?.setResolution && onTimeframeChange) chart.setResolution(tvInterval);
+        if (chart) {
+          chartRef.current = chart;
+          setChartReady(true);
+          if (chart.setResolution && onTimeframeChange) chart.setResolution(tvInterval);
+        }
       } catch {}
     });
 
     return () => {
+      shapeIdsRef.current = [];
+      chartRef.current = null;
+      setChartReady(false);
       try { widget.remove?.(); } catch {}
       widgetRef.current = null;
     };
   }, [symbol, timeframe, signalsUrl, onTimeframeChange, isLibraryReady]);
+
+  // Draw long/short projection lines (Entry, SL, TP) only for the selected signal
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chartReady || !chart?.createShape || !chart?.removeEntity) return;
+
+    (async () => {
+      // Always clear previous projection lines
+      for (const id of shapeIdsRef.current) {
+        try { chart.removeEntity?.(id); } catch {}
+      }
+      shapeIdsRef.current = [];
+
+      // Nothing selected → nothing to draw
+      if (!selectedSignal || selectedSignal.entry_price == null || !selectedSignal.timestamp || !isTradeAction(selectedSignal.action)) {
+        return;
+      }
+
+      const addLine = async (
+        price: number,
+        color: string,
+        title: string,
+        time?: number
+      ): Promise<void> => {
+        try {
+          const point = time != null ? { time, price } : { price };
+          const id = await chart.createShape!(point, {
+            shape: "horizontal_line",
+            lock: true,
+            disableSelection: true,
+            text: title,
+            overrides: {
+              linecolor: color,
+              showPrice: true,
+              linewidth: 2,
+            },
+          });
+          if (id != null) shapeIdsRef.current.push(id);
+        } catch {}
+      };
+
+      const toUnix = (ts: string) => Math.floor(new Date(ts).getTime() / 1000);
+
+      const t = toUnix(selectedSignal.timestamp!);
+      const entryColor = "#58a6ff";
+      const slColor = "#f85149";
+      const tpColor = "#22c55e";
+      await addLine(selectedSignal.entry_price!, entryColor, "Entry", t);
+      if (selectedSignal.stop_loss != null) await addLine(selectedSignal.stop_loss, slColor, "SL", t);
+      if (selectedSignal.target != null) await addLine(selectedSignal.target, tpColor, "TP", t);
+    })();
+  }, [chartReady, selectedSignal]);
 
   return (
     <div

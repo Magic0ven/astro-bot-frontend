@@ -4,12 +4,13 @@ import { useEffect, useRef } from "react";
 import type { OHLCVCandle, Signal, Position } from "@/lib/types";
 
 interface Props {
-  candles:   OHLCVCandle[];
-  signals:   Signal[];
-  positions: Position[];
+  candles:         OHLCVCandle[];
+  signals:         Signal[];
+  positions:       Position[];
+  selectedSignal?: Signal | null;
 }
 
-export default function TradingChart({ candles, signals, positions }: Props) {
+export default function TradingChart({ candles, signals, positions, selectedSignal }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -86,6 +87,39 @@ export default function TradingChart({ candles, signals, positions }: Props) {
           series.createPriceLine({ price: p.sl,    color: "#f85149", lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: `SL`    });
           series.createPriceLine({ price: p.tp,    color: "#3fb950", lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: `TP`    });
         });
+
+        // Highlight a specific signal's entry / SL / TP when selected
+        if (selectedSignal && selectedSignal.entry_price != null) {
+          const entry = selectedSignal.entry_price;
+          series.createPriceLine({
+            price: entry,
+            color: "#58a6ff",
+            lineWidth: 2,
+            lineStyle: LineStyle.Solid,
+            axisLabelVisible: true,
+            title: "Selected Entry",
+          });
+          if (selectedSignal.stop_loss != null) {
+            series.createPriceLine({
+              price: selectedSignal.stop_loss,
+              color: "#f97373",
+              lineWidth: 2,
+              lineStyle: LineStyle.Dashed,
+              axisLabelVisible: true,
+              title: "Selected SL",
+            });
+          }
+          if (selectedSignal.target != null) {
+            series.createPriceLine({
+              price: selectedSignal.target,
+              color: "#4ade80",
+              lineWidth: 2,
+              lineStyle: LineStyle.Dashed,
+              axisLabelVisible: true,
+              title: "Selected TP",
+            });
+          }
+        }
 
         chart.timeScale().fitContent();
 

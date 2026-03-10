@@ -86,8 +86,19 @@ export interface TVWidgetOptions {
   overrides?: Record<string, unknown>;
 }
 
+/** Chart API returned by widget.activeChart() for drawings */
+export interface TVChartApi {
+  createShape?: (
+    point: { time?: number; price?: number },
+    options: { shape: string; lock?: boolean; disableSelection?: boolean; text?: string; overrides?: Record<string, unknown> }
+  ) => Promise<unknown>;
+  removeEntity?: (id: unknown) => void;
+  resolution?: () => string;
+  setResolution?: (res: string) => void;
+}
+
 export interface TVWidget {
-  activeChart?: () => { resolution?: () => string; setResolution?: (res: string) => void };
+  activeChart?: () => TVChartApi;
   onChartReady?: (callback: () => void) => void;
   remove?: () => void;
 }

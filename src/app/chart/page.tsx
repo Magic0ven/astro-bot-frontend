@@ -28,6 +28,7 @@ export default function ChartPage() {
   const [userId, setUserId] = useState("default");
   const [tf, setTf]         = useState("4h");
   const [isTvLibraryReady, setIsTvLibraryReady] = useState(false);
+  const [selectedSignalId, setSelectedSignalId] = useState<number | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined" && Boolean(window.TradingView?.widget)) {
@@ -45,6 +46,10 @@ export default function ChartPage() {
   const { data: positions = [] } = useSWR<Position[]>(
     `/api/users/${userId}/positions`, fetcher, { refreshInterval: 30000 }
   );
+
+  const selectedSignal = selectedSignalId != null
+    ? (signals.find((s) => s.id === selectedSignalId) ?? null)
+    : null;
 
   const latestCandle = candles[candles.length - 1];
   const prevCandle   = candles[candles.length - 2];
@@ -98,9 +103,12 @@ export default function ChartPage() {
           </div>
         </div>
 
-        {/* Chart */}
+        {/* Chart — TradingView with long/short projection (Entry, SL, TP) only when a signal row is clicked */}
         <div className="rounded-xl border border-border bg-surface overflow-hidden">
           <ChartHeader symbol="BTC/USDT" price={latestCandle?.close} changePct={priceDiff} />
+          <p className="px-4 py-1 text-[11px] text-muted border-b border-border bg-surface2/50">
+            Full chart: click a signal row below to show its Entry (blue), SL (red), TP (green) lines.
+          </p>
           <div className="h-[640px]">
             {isTvLibraryReady ? (
               <TVChartContainer
@@ -110,9 +118,15 @@ export default function ChartPage() {
                 isLibraryReady={isTvLibraryReady}
                 className="w-full h-full rounded-b-xl"
                 signalsUrl={`/api/users/${userId}/signals?limit=200`}
+                selectedSignal={selectedSignal}
               />
             ) : (
-              <LightweightTradingChart candles={candles} signals={signals} positions={positions} />
+              <LightweightTradingChart
+                candles={candles}
+                signals={signals}
+                positions={positions}
+                selectedSignal={selectedSignal}
+              />
             )}
           </div>
         </div>
@@ -142,7 +156,14 @@ export default function ChartPage() {
                   {tradeSignals.slice(0, 12).map((s, i) => {
                     const pnl = s.pnl ?? null;
                     return (
-                      <tr key={i} className="border-b border-border/40 hover:bg-surface2 transition-colors">
+                      <tr
+                        key={i}
+                        className={clsx(
+                          "border-b border-border/40 hover:bg-surface2 transition-colors cursor-pointer",
+                          selectedSignalId === s.id && "bg-surface2/80"
+                        )}
+                        onClick={() => setSelectedSignalId(selectedSignalId === s.id ? null : s.id)}
+                      >
                         <td className="py-2 pr-4 mono text-muted">{s.timestamp?.slice(5, 16)}</td>
                         <td className="py-2 pr-4">
                           <span className={clsx("px-2 py-0.5 rounded text-[10px] font-bold", ACTION_BG[s.action] ?? "")}>
