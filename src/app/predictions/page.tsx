@@ -5,10 +5,10 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/api";
 import { api } from "@/lib/api";
 import Header from "@/components/layout/Header";
-import type { Signal, PredictionsCalendarDay } from "@/lib/types";
+import type { Signal, PredictionsCalendarDay, BotPredictResponse, BotPredictProResponse } from "@/lib/types";
 import { ACTION_BG } from "@/lib/types";
 import clsx from "clsx";
-import { Target, TrendingUp, TrendingDown, Minus, Calendar } from "lucide-react";
+import { Target, TrendingUp, TrendingDown, Minus, Calendar, BarChart3, Activity } from "lucide-react";
 
 function pct(from: number, to: number): number {
   if (from === 0) return 0;
@@ -101,12 +101,38 @@ export default function PredictionsPage() {
     return typeof p === "number" && Number.isFinite(p) ? p : null;
   };
 
+  const horizons = [1, 7, 30] as const;
+  const { data: botPredict1d, isLoading: botPredict1dLoading, error: botPredictError } = useSWR<BotPredictResponse>(
+    ["bot-predict", 1],
+    () => api.botPredict(1),
+    { revalidateOnFocus: false, dedupingInterval: 60000 }
+  );
+  const { data: botPredict7d, isLoading: botPredict7dLoading } = useSWR<BotPredictResponse>(
+    ["bot-predict", 7],
+    () => api.botPredict(7),
+    { revalidateOnFocus: false, dedupingInterval: 60000 }
+  );
+  const { data: botPredict30d, isLoading: botPredict30dLoading } = useSWR<BotPredictResponse>(
+    ["bot-predict", 30],
+    () => api.botPredict(30),
+    { revalidateOnFocus: false, dedupingInterval: 60000 }
+  );
+  const botPredictByHorizon = { 1: botPredict1d, 7: botPredict7d, 30: botPredict30d } as const;
+  const botPredictLoading = botPredict1dLoading || botPredict7dLoading || botPredict30dLoading;
+  const hasAnyBotPredict = botPredict1d || botPredict7d || botPredict30d;
+  const { data: botPredictPro, isLoading: botPredictProLoading } = useSWR<BotPredictProResponse>(
+    "bot-predict-pro",
+    () => api.botPredictPro(),
+    { revalidateOnFocus: false, dedupingInterval: 60000 }
+  );
+
   return (
     <>
       <Header title="Predictions" userId={userId} onUserChange={setUserId} />
       <div className="flex-1 p-6 space-y-6">
-        {/* Calendar: predictions till 31 December */}
-        <div className="rounded-xl border border-border bg-surface overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left half: Calendar — predictions till 31 December */}
+        <div className="rounded-xl border border-border bg-surface overflow-hidden min-w-0">
           <div className="px-4 py-3 border-b border-border bg-surface2 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Calendar size={16} className="text-blue" />
@@ -137,9 +163,8 @@ export default function PredictionsPage() {
           {calendar && !calendarLoading && !calendar.unavailable && calendar.days?.length > 0 && (
             <div className="p-4">
               <p className="text-[11px] text-muted mb-4">
-                {calendar.days.some((d) => d.pred_median != null || d.predicted_price != null) && "Price = predicted price (median or range) for that day. "}
                 {calendar.days.some((d) => d.action) && "Signal = from bot (Western + Vedic + numerology). "}
-                Click a day to see all signals (buy/sell), astrology, and price for that day.
+                Click a day to see all signals (buy/sell) and astrology for that day.
               </p>
 
               {/* Month + Year selector */}
@@ -179,7 +204,6 @@ export default function PredictionsPage() {
                     for (const d of calendar.days) dayMap.set(d.date, d);
                     const cells = buildMonthGrid(selectedYear, selectedMonth);
                     const hasAction = calendar.days.some((d) => d.action);
-                    const priceForDay = (d: PredictionsCalendarDay) => d.pred_median ?? d.predicted_price ?? null;
                     return cells.map((dayNum, idx) => {
                       if (dayNum === null) {
                         return <div key={`e-${idx}`} className="min-h-[88px] p-2 border-b border-r border-border/50 bg-surface/50" />;
@@ -187,7 +211,6 @@ export default function PredictionsPage() {
                       const key = dateKey(selectedYear, selectedMonth, dayNum);
                       const data = dayMap.get(key);
                       const isSelected = selectedDayKey === key;
-                      const price = data ? priceForDay(data) : null;
                       return (
                         <button
                           key={key}
@@ -220,11 +243,6 @@ export default function PredictionsPage() {
                                   {data.action.includes("SELL") && <TrendingDown size={8} />}
                                   {!data.action.includes("BUY") && !data.action.includes("SELL") && <Minus size={8} />}
                                   {actionDisplayLabel(data.action)}
-                                </span>
-                              )}
-                              {price != null && (
-                                <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400 mt-1 mono" title="Predicted price for this day">
-                                  ${formatPrice(price)}
                                 </span>
                               )}
                             </>
@@ -325,131 +343,8 @@ export default function PredictionsPage() {
                       </div>
                     </div>
 
-                    {(dayData.pred_median != null || dayData.predicted_price != null) && (
-                      <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                        <p className="text-[11px] text-muted uppercase tracking-wider mb-0.5">Predicted price for this day</p>
-                        {dayData.pred_median != null ? (
-                          <>
-                            <p className="text-xl font-bold mono text-amber-600 dark:text-amber-400">${formatPrice(dayData.pred_median)}</p>
-                            {(dayData.pred_low != null || dayData.pred_high != null) && (
-                              <p className="text-xs text-muted mt-1">
-                                Range: ${formatPrice(dayData.pred_low ?? dayData.pred_median)} – ${formatPrice(dayData.pred_high ?? dayData.pred_median)}
-                              </p>
-                            )}
-                          </>
-                        ) : (
-                          <p className="text-xl font-bold mono text-amber-600 dark:text-amber-400">${formatPrice(dayData.predicted_price!)}</p>
-                        )}
-                        {dayData.actual_close != null && (
-                          <p className="text-xs text-muted mt-1">Actual close: ${formatPrice(dayData.actual_close)}</p>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Full maths: only for legacy format (no pred_median); hide for new astrology-only calendar */}
-                    {dayData.pred_median == null && dayData.predicted_price != null && dayData.predicted_return != null && calendar.model && dayData.features_norm != null && dayData.raw_return != null && dayData.dampened_return != null && dayData.signal_weight != null && dayData.max_daily_move != null && (() => {
-                      const { weights, bias, feature_cols } = calendar.model;
-                      const prevPrice = dayData.predicted_price / Math.exp(dayData.predicted_return);
-                      const terms = feature_cols.map((name, i) => ({ name, w: weights[i], x: dayData.features_norm![i], term: weights[i] * dayData.features_norm![i] }));
-                      const sumTerms = terms.reduce((s, t) => s + t.term, 0);
-                      return (
-                        <div className="mb-4 rounded-xl border border-border bg-surface2 overflow-hidden">
-                          <div className="px-3 py-2 border-b border-border bg-surface/50">
-                            <span className="text-xs font-semibold text-muted uppercase tracking-wider">Calculation</span>
-                          </div>
-                          <div className="p-4 space-y-4">
-                            {/* Step 1: Normalized features */}
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue/20 text-[10px] font-bold text-blue">1</span>
-                                <span className="text-xs font-medium text-muted">Normalized features <span className="font-normal">(z-score)</span></span>
-                              </div>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 font-mono text-[11px] text-muted">
-                                {terms.map((t, i) => (
-                                  <span key={i} className="truncate" title={`${t.name} = ${t.x.toFixed(4)}`}>
-                                    <span className="text-muted/80">{t.name}</span>
-                                    <span className="text-text ml-1">= {t.x.toFixed(4)}</span>
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Step 2: raw_return */}
-                            <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue/20 text-[10px] font-bold text-blue">2</span>
-                                <span className="text-xs font-medium text-muted">raw_return = Σ(w·x) + bias</span>
-                              </div>
-                              <p className="font-mono text-xs text-muted pl-7">
-                                Σ(w·x) = {sumTerms.toFixed(6)} ; bias = {bias.toFixed(6)} → raw_return = <span className="text-amber-600 dark:text-amber-400 font-medium">{(dayData.raw_return!).toFixed(6)}</span>
-                              </p>
-                            </div>
-
-                            {/* Step 3: Dampening */}
-                            <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue/20 text-[10px] font-bold text-blue">3</span>
-                                <span className="text-xs font-medium text-muted">dampened_return</span>
-                              </div>
-                              <p className="font-mono text-xs text-muted pl-7">
-                                {dayData.signal_weight!.toFixed(4)} × raw + (1 − {dayData.signal_weight!.toFixed(4)}) × bias → <span className="text-amber-600 dark:text-amber-400 font-medium">{(dayData.dampened_return!).toFixed(6)}</span>
-                              </p>
-                            </div>
-
-                            {/* Step 4: Clamp */}
-                            <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue/20 text-[10px] font-bold text-blue">4</span>
-                                <span className="text-xs font-medium text-muted">clamped_return</span>
-                              </div>
-                              <p className="font-mono text-xs text-muted pl-7">
-                                clamp(·, ±{dayData.max_daily_move!.toFixed(4)}) → <span className="text-amber-600 dark:text-amber-400 font-medium">{(dayData.predicted_return!).toFixed(6)}</span>
-                              </p>
-                            </div>
-
-                            {/* Step 5: Price */}
-                            <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/30 text-[10px] font-bold text-amber-600 dark:text-amber-400">5</span>
-                                <span className="text-xs font-medium text-amber-700 dark:text-amber-300">P_today = P_prev × e^r</span>
-                              </div>
-                              <p className="font-mono text-sm text-amber-700 dark:text-amber-300 pl-7 font-semibold">
-                                {prevPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} × {Math.exp(dayData.predicted_return!).toFixed(6)} = {dayData.predicted_price!.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                    {/* Fallback when no model/calculation fields (legacy calendar only; never for pred_median format) */}
-                    {dayData.pred_median == null && dayData.predicted_price != null && dayData.predicted_return != null && !(calendar.model && dayData.features_norm != null && dayData.raw_return != null) && (() => {
-                      const r = dayData.predicted_return;
-                      const prevPrice = dayData.predicted_price / Math.exp(r);
-                      const expR = Math.exp(r);
-                      return (
-                        <div className="mb-4 rounded-xl border border-border bg-surface2 overflow-hidden">
-                          <div className="px-3 py-2 border-b border-border bg-surface/50">
-                            <span className="text-xs font-semibold text-muted uppercase tracking-wider">Price calculation</span>
-                          </div>
-                          <div className="p-4">
-                            <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
-                              <p className="font-mono text-xs text-muted space-y-0.5 mb-2">
-                                <span>P_prev = {prevPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                <span className="mx-2">·</span>
-                                <span>r = {r.toFixed(6)}</span>
-                                <span className="mx-2">·</span>
-                                <span>e^r = {expR.toFixed(6)}</span>
-                              </p>
-                              <p className="font-mono text-sm text-amber-700 dark:text-amber-300 font-semibold">
-                                P_today = {prevPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} × {expR.toFixed(6)} = {dayData.predicted_price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                    {/* Astrology: for new calendar (pred_median) show only this; for legacy show below as well */}
-                    {(dayData.pred_median != null || naks !== "–" || retroW.length > 0 || retroV.length > 0) && (
+                    {/* Astrology */}
+                    {(naks !== "–" || retroW.length > 0 || retroV.length > 0) && (
                       <>
                         <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Astrology</p>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
@@ -533,6 +428,75 @@ export default function PredictionsPage() {
               })()}
             </div>
           )}
+        </div>
+
+        {/* Right half: Astro BTC Bot predictions (astro_btc_bot API) */}
+        <div className="rounded-xl border border-border bg-surface overflow-hidden min-w-0">
+          <div className="px-4 py-3 border-b border-border bg-surface2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BarChart3 size={16} className="text-blue" />
+              <span className="text-sm font-semibold">Astro BTC Bot predictions</span>
+            </div>
+          </div>
+          <div className="p-4 space-y-4">
+            {botPredictError && (
+              <div className="p-4 rounded-lg bg-red/10 border border-red/20 text-sm text-red">
+                Bot API unavailable. Set BOT_API_URL and run the astro_btc_bot server (e.g. <code className="text-[11px]">uvicorn src.api.server:app --port 8001</code>).
+              </div>
+            )}
+            {(botPredictLoading || botPredictProLoading) && !hasAnyBotPredict && !botPredictError && (
+              <div className="p-8 text-center text-muted text-sm">Loading bot predictions…</div>
+            )}
+            {hasAnyBotPredict && !botPredictError && (
+              <>
+                <div className="space-y-3">
+                  {horizons.map((h) => {
+                    const pred = botPredictByHorizon[h];
+                    if (!pred) return null;
+                    return (
+                      <div key={h} className="rounded-lg border border-border bg-surface2/50 p-4">
+                        <p className="text-[11px] text-muted uppercase tracking-wider mb-2">
+                          {h}d price range
+                        </p>
+                        <p className="text-xs text-muted mb-1">Date: {pred.date}</p>
+                        <div className="flex flex-wrap items-baseline gap-3">
+                          <span className="text-lg font-bold mono text-amber-600 dark:text-amber-400">
+                            ${formatPrice(pred.predicted_min)} – ${formatPrice(pred.predicted_max)}
+                          </span>
+                          <span className="text-xs text-muted">Confidence: {(pred.confidence * 100).toFixed(1)}%</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {botPredictPro && (
+                  <div className="rounded-lg border border-border bg-surface2/50 p-4">
+                    <p className="text-[11px] text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <Activity size={12} /> Ensemble (pro)
+                    </p>
+                    <p className="text-xs text-muted mb-1">As of: {botPredictPro.date}</p>
+                    <div className="grid grid-cols-3 gap-2 text-sm">
+                      <div>
+                        <p className="text-[10px] text-muted uppercase">Expected return</p>
+                        <p className={clsx("font-semibold mono", botPredictPro.expected_return >= 0 ? "text-green" : "text-red")}>
+                          {(botPredictPro.expected_return * 100).toFixed(3)}%
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted uppercase">Volatility</p>
+                        <p className="font-semibold mono text-text">{(botPredictPro.expected_volatility * 100).toFixed(3)}%</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted uppercase">P(price up)</p>
+                        <p className="font-semibold mono text-blue">{(botPredictPro.probability_price_up * 100).toFixed(1)}%</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
         </div>
 
         <div className="flex items-center justify-between">

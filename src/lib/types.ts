@@ -67,6 +67,22 @@ export interface PredictionsCalendarResponse {
   model?:        PredictionsCalendarModel;
 }
 
+/** Astro BTC Bot /predict response (price range prediction) */
+export interface BotPredictResponse {
+  date: string;
+  predicted_min: number;
+  predicted_max: number;
+  confidence: number;
+}
+
+/** Astro BTC Bot /predict_pro response (ensemble) */
+export interface BotPredictProResponse {
+  date: string;
+  expected_return: number;
+  expected_volatility: number;
+  probability_price_up: number;
+}
+
 /** Full signal payload from bot (console-style display) */
 export interface FullSignalPayload {
   action?: string;

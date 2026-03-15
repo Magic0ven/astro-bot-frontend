@@ -42,6 +42,18 @@ export const api = {
       `/api/predictions/calendar${q ? `?${q}` : ""}`
     );
   },
+  /** Astro BTC Bot: price range prediction (proxied via backend BOT_API_URL) */
+  botPredict: (horizonDays = 1, date?: string) => {
+    const params = new URLSearchParams();
+    params.set("horizon_days", String(horizonDays));
+    if (date) params.set("date", date);
+    return get<import("@/lib/types").BotPredictResponse>(
+      `/api/bot/predict?${params.toString()}`
+    );
+  },
+  /** Astro BTC Bot: ensemble expected return / vol / P(up) */
+  botPredictPro: () =>
+    get<import("@/lib/types").BotPredictProResponse>("/api/bot/predict_pro"),
   openPaperTrade: (body: {
     user_id: string; side: string; entry: number;
     sl: number; tp: number; notional: number; signal?: string;

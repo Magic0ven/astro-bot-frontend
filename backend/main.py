@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 BOT_DIR          = Path(os.getenv("BOT_DIR", "/Users/akagami/astro-bot"))
+BOT_API_URL      = os.getenv("BOT_API_URL", "http://localhost:8001")  # Astro BTC prediction API (astro_btc_bot)
 USERS_FILE       = Path(__file__).parent / "users.json"
 PROVISION_SCRIPT = Path(__file__).parent.parent / "provision_user.sh"
 DATABASE_URL     = os.getenv("DATABASE_URL")
@@ -544,6 +545,44 @@ def get_market_stats(symbol: str = "BTC"):
         "fundingPct": round(funding * 100, 4),
         "impactPxs": [impact_buy, impact_sell],
     }
+
+
+# ── Bot prediction API proxy (astro_btc_bot) ─────────────────────────────────────
+
+def _fetch_bot_api(path: str, params: Optional[dict] = None, timeout: int = 15) -> dict:
+    """GET from BOT_API_URL (astro_btc_bot). Returns JSON or raises HTTPException."""
+    import urllib.request as urlreq
+    base = BOT_API_URL.rstrip("/")
+    url = f"{base}{path}"
+    if params:
+        q = "&".join(f"{k}={urlreq.quote(str(v))}" for k, v in params.items())
+        url = f"{url}?{q}"
+    req = urlreq.Request(url, method="GET", headers={"Accept": "application/json"})
+    try:
+        with _urlopen_no_ssl_verify(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode())
+    except Exception as e:
+        raise HTTPException(502, f"Bot API error: {e}")
+
+
+@app.get("/api/bot/predict")
+def get_bot_predict(horizon_days: int = 1, date: Optional[str] = None):
+    """
+    Proxy to astro_btc_bot /predict. Returns predicted_min, predicted_max, confidence for BTC.
+    Set BOT_API_URL to the astro_btc_bot server (e.g. http://localhost:8001).
+    """
+    params = {"horizon_days": horizon_days}
+    if date:
+        params["date"] = date
+    return _fetch_bot_api("/predict", params=params)
+
+
+@app.get("/api/bot/predict_pro")
+def get_bot_predict_pro():
+    """
+    Proxy to astro_btc_bot /predict_pro. Returns expected_return, expected_volatility, probability_price_up.
+    """
+    return _fetch_bot_api("/predict_pro")
 
 
 # ── Prediction calendar (static JSON) ─────────────────────────────────────────
