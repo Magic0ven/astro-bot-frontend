@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { fetcher, api } from "@/lib/api";
+import { fetcher } from "@/lib/api";
 import Header from "@/components/layout/Header";
 import type { Position, EquityState, Signal } from "@/lib/types";
 import clsx from "clsx";
 import {
-  Terminal, TrendingUp, TrendingDown, Plus,
-  X, Trophy, AlertCircle, BarChart2,
+  Terminal, TrendingUp, TrendingDown, BarChart2,
 } from "lucide-react";
 
 function StatPill({ label, value, color }: { label: string; value: string; color: string }) {
@@ -20,24 +19,10 @@ function StatPill({ label, value, color }: { label: string; value: string; color
   );
 }
 
-interface TradeFormData {
-  side:     "BUY" | "SELL";
-  entry:    string;
-  sl:       string;
-  tp:       string;
-  notional: string;
-}
-
-const DEFAULT_FORM: TradeFormData = { side: "BUY", entry: "", sl: "", tp: "", notional: "" };
-
 export default function PaperPage() {
-  const [userId, setUserId]     = useState("default");
-  const [form, setForm]         = useState<TradeFormData>(DEFAULT_FORM);
-  const [submitting, setSubmit] = useState(false);
-  const [error, setError]       = useState("");
-  const [success, setSuccess]   = useState("");
+  const [userId, setUserId] = useState("default");
 
-  const { data: positions = [], mutate: mutatePosns } =
+  const { data: positions = [] } =
     useSWR<Position[]>(`/api/users/${userId}/positions`, fetcher, { refreshInterval: 15000 });
 
   const { data: equity }     = useSWR<EquityState>(`/api/users/${userId}/equity`,          fetcher, { refreshInterval: 30000 });
@@ -47,37 +32,6 @@ export default function PaperPage() {
   const paperTrades= equity?.paper_trades ?? trades.length;
   const wins       = trades.filter(t => (t.pnl ?? 0) > 0).length;
   const winRate    = paperTrades > 0 ? (wins / paperTrades * 100).toFixed(1) : "0.0";
-
-  async function handleOpen(e: React.FormEvent) {
-    e.preventDefault();
-    setError(""); setSuccess("");
-    const entry = parseFloat(form.entry);
-    const sl    = parseFloat(form.sl);
-    const tp    = parseFloat(form.tp);
-    const notional = parseFloat(form.notional);
-    if (!entry || !sl || !tp || !notional) { setError("All fields required."); return; }
-    if (form.side === "BUY"  && sl >= entry) { setError("SL must be below entry for BUY.");  return; }
-    if (form.side === "SELL" && sl <= entry) { setError("SL must be above entry for SELL."); return; }
-
-    setSubmit(true);
-    try {
-      await api.openPaperTrade({ user_id: userId, side: form.side, entry, sl, tp, notional, signal: "MANUAL" });
-      setSuccess("Paper trade opened!");
-      setForm(DEFAULT_FORM);
-      mutatePosns();
-    } catch (err) {
-      setError("Failed to open trade.");
-    } finally {
-      setSubmit(false);
-    }
-  }
-
-  async function handleClose(index: number) {
-    try {
-      await api.closePaperTrade(userId, index);
-      mutatePosns();
-    } catch { /* silent */ }
-  }
 
   return (
     <>
@@ -94,105 +48,16 @@ export default function PaperPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-          {/* Manual trade form */}
+          {/* Auto simulation panel */}
           <div className="rounded-xl border border-border bg-surface p-6 space-y-5">
             <div className="flex items-center gap-2">
               <Terminal size={16} className="text-blue" />
-              <h2 className="text-sm font-semibold text-text">Open Manual Paper Trade</h2>
+              <h2 className="text-sm font-semibold text-text">Auto Paper Simulation</h2>
             </div>
-
-            <form onSubmit={handleOpen} className="space-y-4">
-              {/* Side toggle */}
-              <div>
-                <label className="text-xs text-muted block mb-2">Side</label>
-                <div className="flex gap-2">
-                  {(["BUY", "SELL"] as const).map(s => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setForm(f => ({ ...f, side: s }))}
-                      className={clsx(
-                        "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-bold transition-all",
-                        form.side === s && s === "BUY"  ? "bg-green/10 border-green/40 text-green"  :
-                        form.side === s && s === "SELL" ? "bg-red/10 border-red/40 text-red"        :
-                        "bg-surface2 border-border text-muted hover:text-text"
-                      )}
-                    >
-                      {s === "BUY" ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Price fields */}
-              {[
-                { key: "entry" as const, label: "Entry Price",  placeholder: "e.g. 65000" },
-                { key: "sl"    as const, label: "Stop Loss",    placeholder: form.side === "BUY" ? "Below entry" : "Above entry" },
-                { key: "tp"    as const, label: "Take Profit",  placeholder: form.side === "BUY" ? "Above entry" : "Below entry" },
-                { key: "notional" as const, label: "Position Size (USDT notional)", placeholder: "e.g. 300" },
-              ].map(({ key, label, placeholder }) => (
-                <div key={key}>
-                  <label className="text-xs text-muted block mb-1.5">{label}</label>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder={placeholder}
-                    value={form[key]}
-                    onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-                    className="w-full bg-surface2 border border-border rounded-lg px-3 py-2.5 text-sm mono text-text placeholder-muted outline-none focus:border-blue/50 transition-colors"
-                  />
-                </div>
-              ))}
-
-              {/* Risk preview */}
-              {form.entry && form.sl && form.notional && (() => {
-                const fe = parseFloat(form.entry) || 0;
-                const fs = parseFloat(form.sl)    || 0;
-                const fn = parseFloat(form.notional) || 0;
-                const ft = parseFloat(form.tp)    || 0;
-                const stopDist = Math.abs(fe - fs);
-                const stopPct  = fe > 0 ? stopDist / fe * 100 : 0;
-                const riskAmt  = fe > 0 ? stopDist / fe * fn  : 0;
-                const profitAmt= fe > 0 && ft > 0 ? Math.abs(fe - ft) / fe * fn : 0;
-                return (
-                  <div className="bg-surface2 rounded-lg px-4 py-3 text-xs space-y-1 border border-border">
-                    <p className="text-muted font-medium">Risk Preview</p>
-                    <div className="flex justify-between">
-                      <span className="text-muted">Stop distance</span>
-                      <span className="mono text-text">{stopDist.toFixed(2)} pts ({stopPct.toFixed(2)}%)</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted">Risk amount</span>
-                      <span className="mono text-red">${riskAmt.toFixed(2)}</span>
-                    </div>
-                    {form.tp && (
-                      <div className="flex justify-between">
-                        <span className="text-muted">Potential profit</span>
-                        <span className="mono text-green">${profitAmt.toFixed(2)}</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {error   && <p className="text-xs text-red flex items-center gap-1.5"><AlertCircle size={12} />{error}</p>}
-              {success && <p className="text-xs text-green flex items-center gap-1.5"><Trophy size={12} />{success}</p>}
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className={clsx(
-                  "w-full py-3 rounded-lg font-bold text-sm transition-all border",
-                  form.side === "BUY"
-                    ? "bg-green/10 border-green/30 text-green hover:bg-green/20"
-                    : "bg-red/10 border-red/30 text-red hover:bg-red/20",
-                  submitting && "opacity-50 cursor-not-allowed"
-                )}
-              >
-                {submitting ? "Opening…" : `Open ${form.side} Paper Trade`}
-              </button>
-            </form>
+            <div className="bg-surface2 rounded-lg border border-border px-4 py-3 text-sm text-muted">
+              This page is read-only. Paper trades are simulated automatically from bot signals
+              (open, SL/TP/timeout/opposite-signal close, and realised P&amp;L).
+            </div>
           </div>
 
           {/* Open positions panel */}
@@ -232,13 +97,6 @@ export default function PaperPage() {
                             </span>
                             <span className="text-xs text-muted">· {p.signal}</span>
                           </div>
-                          <button
-                            onClick={() => handleClose(i)}
-                            className="text-muted hover:text-red transition-colors p-1 rounded"
-                            title="Close position"
-                          >
-                            <X size={13} />
-                          </button>
                         </div>
 
                         <div className="grid grid-cols-3 gap-2 text-xs">

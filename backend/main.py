@@ -231,6 +231,32 @@ def compute_stats(trades: list[dict]) -> dict:
     }
 
 
+def _computed_paper_totals(bot_dir: Path, user_id: str) -> dict:
+    """
+    Compute paper metrics directly from closed trade rows.
+    This prevents stale equity_state snapshots from showing zero PnL.
+    """
+    trades = query_signals_db(bot_dir, limit=5000, closed_only=True, user_id=user_id)
+    pnl_values = [(t.get("pnl") or 0.0) for t in trades if t.get("pnl") is not None]
+    total = float(sum(pnl_values))
+    wins = sum(1 for p in pnl_values if p > 0)
+    losses = sum(1 for p in pnl_values if p <= 0)
+    return {
+        "paper_pnl": round(total, 4),
+        "paper_trades": len(pnl_values),
+        "paper_wins": wins,
+        "paper_losses": losses,
+    }
+
+
+def _equity_with_computed_pnl(bot_dir: Path, user_id: str) -> dict:
+    equity = _load_equity(bot_dir, user_id=user_id) or {}
+    agg = _computed_paper_totals(bot_dir, user_id)
+    merged = dict(equity)
+    merged.update(agg)
+    return merged
+
+
 # ── Health ─────────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
@@ -258,7 +284,7 @@ def get_positions(user_id: str):
 @app.get("/api/users/{user_id}/equity")
 def get_equity(user_id: str):
     bot_dir = resolve_user(user_id)
-    return _load_equity(bot_dir, user_id=user_id)
+    return _equity_with_computed_pnl(bot_dir, user_id=user_id)
 
 
 @app.get("/api/users/{user_id}/trades")
@@ -271,7 +297,7 @@ def get_trades(user_id: str, limit: int = 200):
 def get_stats(user_id: str):
     bot_dir   = resolve_user(user_id)
     trades    = query_signals_db(bot_dir, 500, closed_only=True, user_id=user_id)
-    equity    = _load_equity(bot_dir, user_id=user_id)
+    equity    = _equity_with_computed_pnl(bot_dir, user_id=user_id)
     positions = _load_positions(bot_dir, user_id=user_id)
     stats     = compute_stats(trades)
     stats["peak_equity"]    = equity.get("peak_equity", 0)
