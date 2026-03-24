@@ -29,21 +29,32 @@ export default function PaperPage() {
   const { data: trades = [] } = useSWR<Signal[]>(`/api/users/${userId}/trades?limit=100`,      fetcher, { refreshInterval: 30000 });
   const { data: signals = [] } = useSWR<Signal[]>(`/api/users/${userId}/signals?limit=300`,    fetcher, { refreshInterval: 30000 });
 
+  const paperTradesRows = trades.filter((t) => Number(t.paper) === 1);
+  const paperSignalsRows = signals.filter((s) => Number(s.paper) === 1);
+
   const paperPnl = equity?.paper_pnl ?? 0;
-  const closedTrades = trades.length;
-  const wins = trades.filter((t) => (t.pnl ?? 0) > 0).length;
+  const closedTrades = paperTradesRows.length;
+  const wins = paperTradesRows.filter((t) => (t.pnl ?? 0) > 0).length;
   const winRate = closedTrades > 0 ? (wins / closedTrades * 100).toFixed(1) : "0.0";
 
-  const actionableSignals = signals.filter((s) => {
+  const actionableSignals = paperSignalsRows.filter((s) => {
     const a = s.action || "";
     return a === "STRONG_BUY" || a === "STRONG_SELL" || a === "WEAK_BUY" || a === "WEAK_SELL";
+  });
+  const strongSignals = actionableSignals.filter((s) => {
+    const a = s.action || "";
+    return a === "STRONG_BUY" || a === "STRONG_SELL";
+  });
+  const weakSignals = actionableSignals.filter((s) => {
+    const a = s.action || "";
+    return a === "WEAK_BUY" || a === "WEAK_SELL";
   });
   const skippedActionableSignals = actionableSignals.filter((s) =>
     (s.notes || "").toLowerCase().startsWith("skipped"),
   );
-  const openedEntries = actionableSignals.filter((s) => {
+  const openedEntries = strongSignals.filter((s) => {
     const notes = (s.notes || "").toLowerCase();
-    return !notes.startsWith("skipped") && s.pnl == null;
+    return !notes.startsWith("skipped");
   });
 
   return (
@@ -59,10 +70,16 @@ export default function PaperPage() {
           <StatPill label="Open Now"     value={positions.length.toString()} color="text-orange" />
         </div>
         <div className="grid grid-cols-4 gap-4">
-          <StatPill label="Signals Generated" value={actionableSignals.length.toString()}      color="text-cyan" />
-          <StatPill label="Entries Opened"    value={openedEntries.length.toString()}          color="text-green" />
-          <StatPill label="Signals Skipped"   value={skippedActionableSignals.length.toString()} color="text-red" />
-          <StatPill label="Data Window"       value={`${signals.length} rows`}                 color="text-muted" />
+          <StatPill label="Signals Generated (All)" value={actionableSignals.length.toString()} color="text-cyan" />
+          <StatPill label="Executable (STRONG)"     value={strongSignals.length.toString()}     color="text-blue" />
+          <StatPill label="Entries Opened"          value={openedEntries.length.toString()}     color="text-green" />
+          <StatPill label="Signals Skipped"         value={skippedActionableSignals.length.toString()} color="text-red" />
+        </div>
+        <div className="grid grid-cols-4 gap-4">
+          <StatPill label="Weak Signals"      value={weakSignals.length.toString()}             color="text-orange" />
+          <StatPill label="Strong Signals"    value={strongSignals.length.toString()}           color="text-purple" />
+          <StatPill label="Closed Trades"     value={closedTrades.toString()}                   color="text-blue" />
+          <StatPill label="Data Window"       value={`${paperSignalsRows.length} rows`}        color="text-muted" />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
