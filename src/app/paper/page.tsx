@@ -25,13 +25,26 @@ export default function PaperPage() {
   const { data: positions = [] } =
     useSWR<Position[]>(`/api/users/${userId}/positions`, fetcher, { refreshInterval: 15000 });
 
-  const { data: equity }     = useSWR<EquityState>(`/api/users/${userId}/equity`,          fetcher, { refreshInterval: 30000 });
-  const { data: trades = [] } = useSWR<Signal[]>  (`/api/users/${userId}/trades?limit=50`, fetcher, { refreshInterval: 30000 });
+  const { data: equity }      = useSWR<EquityState>(`/api/users/${userId}/equity`,            fetcher, { refreshInterval: 30000 });
+  const { data: trades = [] } = useSWR<Signal[]>(`/api/users/${userId}/trades?limit=100`,      fetcher, { refreshInterval: 30000 });
+  const { data: signals = [] } = useSWR<Signal[]>(`/api/users/${userId}/signals?limit=300`,    fetcher, { refreshInterval: 30000 });
 
-  const paperPnl   = equity?.paper_pnl   ?? 0;
-  const paperTrades= equity?.paper_trades ?? trades.length;
-  const wins       = trades.filter(t => (t.pnl ?? 0) > 0).length;
-  const winRate    = paperTrades > 0 ? (wins / paperTrades * 100).toFixed(1) : "0.0";
+  const paperPnl = equity?.paper_pnl ?? 0;
+  const closedTrades = trades.length;
+  const wins = trades.filter((t) => (t.pnl ?? 0) > 0).length;
+  const winRate = closedTrades > 0 ? (wins / closedTrades * 100).toFixed(1) : "0.0";
+
+  const actionableSignals = signals.filter((s) => {
+    const a = s.action || "";
+    return a === "STRONG_BUY" || a === "STRONG_SELL" || a === "WEAK_BUY" || a === "WEAK_SELL";
+  });
+  const skippedActionableSignals = actionableSignals.filter((s) =>
+    (s.notes || "").toLowerCase().startsWith("skipped"),
+  );
+  const openedEntries = actionableSignals.filter((s) => {
+    const notes = (s.notes || "").toLowerCase();
+    return !notes.startsWith("skipped") && s.pnl == null;
+  });
 
   return (
     <>
@@ -41,9 +54,15 @@ export default function PaperPage() {
         {/* Stats row */}
         <div className="grid grid-cols-4 gap-4">
           <StatPill label="Paper P&L"    value={`${paperPnl >= 0 ? "+" : ""}$${paperPnl.toFixed(2)}`} color={paperPnl >= 0 ? "text-green" : "text-red"} />
-          <StatPill label="Total Trades" value={paperTrades.toString()}      color="text-blue"   />
+          <StatPill label="Closed Trades" value={closedTrades.toString()}     color="text-blue"   />
           <StatPill label="Win Rate"     value={`${winRate}%`}               color="text-purple" />
           <StatPill label="Open Now"     value={positions.length.toString()} color="text-orange" />
+        </div>
+        <div className="grid grid-cols-4 gap-4">
+          <StatPill label="Signals Generated" value={actionableSignals.length.toString()}      color="text-cyan" />
+          <StatPill label="Entries Opened"    value={openedEntries.length.toString()}          color="text-green" />
+          <StatPill label="Signals Skipped"   value={skippedActionableSignals.length.toString()} color="text-red" />
+          <StatPill label="Data Window"       value={`${signals.length} rows`}                 color="text-muted" />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
