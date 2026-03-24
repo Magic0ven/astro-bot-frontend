@@ -81,11 +81,20 @@ export default function TradingChart({ candles, signals, positions, selectedSign
 
         series.setMarkers(markers);
 
-        // SL / TP price lines for open positions
+        // SL / TP price lines for open positions (bot KV uses entry_price/stop_loss/target)
         positions.forEach((p) => {
-          series.createPriceLine({ price: p.entry, color: "#58a6ff", lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: true, title: `Entry` });
-          series.createPriceLine({ price: p.sl,    color: "#f85149", lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: `SL`    });
-          series.createPriceLine({ price: p.tp,    color: "#3fb950", lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: `TP`    });
+          const entry = p.entry ?? p.entry_price;
+          const sl = p.sl ?? p.stop_loss;
+          const tp = p.tp ?? p.target;
+          if (entry != null && entry > 0) {
+            series.createPriceLine({ price: entry, color: "#58a6ff", lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: true, title: `Entry` });
+          }
+          if (sl != null && sl > 0) {
+            series.createPriceLine({ price: sl, color: "#f85149", lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: `SL` });
+          }
+          if (tp != null && tp > 0) {
+            series.createPriceLine({ price: tp, color: "#3fb950", lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: `TP` });
+          }
         });
 
         // Highlight a specific signal's entry / SL / TP when selected

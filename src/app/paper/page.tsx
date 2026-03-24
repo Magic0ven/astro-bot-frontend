@@ -38,6 +38,42 @@ function closeReasonColor(result?: string | null): string {
   return "text-muted";
 }
 
+/** Merge bot KV shape (entry_price, stop_loss, target, action) with manual dashboard shape */
+function normalizeOpenPosition(p: Position) {
+  const entry = p.entry ?? p.entry_price ?? 0;
+  const sl = p.sl ?? p.stop_loss ?? 0;
+  const tp = p.tp ?? p.target ?? 0;
+  const notional = p.notional ?? 0;
+  const action = p.action ?? "";
+  let side = (p.side || "").toUpperCase();
+  if (!side && action.includes("BUY")) side = "BUY";
+  if (!side && action.includes("SELL")) side = "SELL";
+  if (!side) side = "—";
+  const signal = (p.signal && String(p.signal).trim()) || action || "—";
+  const openedAt = p.opened_at ?? "";
+  const open_ts =
+    p.open_ts ??
+    (openedAt ? openedAt.replace("T", " ").slice(0, 16) : "–");
+  let ageLabel: string;
+  if (typeof p.age === "number" && p.age > 0) {
+    ageLabel = `${p.age} bars`;
+  } else if (openedAt) {
+    try {
+      const opened = new Date(openedAt).getTime();
+      const h = (Date.now() - opened) / 3_600_000;
+      ageLabel = h < 1 ? `${Math.round(h * 60)}m open` : `${h.toFixed(1)}h open`;
+    } catch {
+      ageLabel = "–";
+    }
+  } else {
+    ageLabel = "–";
+  }
+  const risk = entry > 0 ? (Math.abs(entry - sl) / entry) * notional : 0;
+  const reward = entry > 0 ? (Math.abs(entry - tp) / entry) * notional : 0;
+  const isLong = side === "BUY";
+  return { entry, sl, tp, notional, side, signal, open_ts, ageLabel, risk, reward, isLong, symbol: p.symbol };
+}
+
 export default function PaperPage() {
   const [userId, setUserId] = useState("default");
 
@@ -131,34 +167,31 @@ export default function PaperPage() {
               ) : (
                 <div className="space-y-3">
                   {positions.map((p, i) => {
-                    const entry  = p.entry    ?? 0;
-                    const sl     = p.sl       ?? 0;
-                    const tp     = p.tp       ?? 0;
-                    const notional = p.notional ?? 0;
-                    const risk   = entry > 0 ? Math.abs(entry - sl)  / entry * notional : 0;
-                    const reward = entry > 0 ? Math.abs(entry - tp)  / entry * notional : 0;
+                    const row = normalizeOpenPosition(p);
+                    const { entry, sl, tp, notional, side, signal, open_ts, ageLabel, risk, reward, isLong, symbol } = row;
                     return (
                       <div key={i} className={clsx(
                         "rounded-lg border p-4 space-y-3 relative",
-                        p.side === "BUY" ? "border-green/20 bg-green/[0.03]" : "border-red/20 bg-red/[0.03]"
+                        isLong ? "border-green/20 bg-green/[0.03]" : "border-red/20 bg-red/[0.03]"
                       )}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            {p.side === "BUY"
+                            {isLong
                               ? <TrendingUp  size={14} className="text-green" />
                               : <TrendingDown size={14} className="text-red"   />}
-                            <span className={clsx("font-bold mono text-sm", p.side === "BUY" ? "text-green" : "text-red")}>
-                              {p.side}
+                            <span className={clsx("font-bold mono text-sm", isLong ? "text-green" : "text-red")}>
+                              {side}
                             </span>
-                            <span className="text-xs text-muted">· {p.signal}</span>
+                            <span className="text-xs text-muted">· {signal}</span>
+                            {symbol ? <span className="text-[10px] text-muted mono">{symbol}</span> : null}
                           </div>
                         </div>
 
                         <div className="grid grid-cols-3 gap-2 text-xs">
                           {[
-                            { label: "Entry",    value: `$${entry.toLocaleString()}`,    color: "text-blue"  },
-                            { label: "SL",       value: `$${sl.toLocaleString()}`,      color: "text-red"   },
-                            { label: "TP",       value: `$${tp.toLocaleString()}`,      color: "text-green" },
+                            { label: "Entry",    value: `$${entry.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,    color: "text-blue"  },
+                            { label: "SL",       value: `$${sl.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,      color: "text-red"   },
+                            { label: "TP",       value: `$${tp.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,      color: "text-green" },
                             { label: "Notional", value: `$${notional.toFixed(0)}`,     color: "text-muted" },
                             { label: "Risk",     value: `$${risk.toFixed(2)}`,         color: "text-red"   },
                             { label: "Reward",   value: `$${reward.toFixed(2)}`,       color: "text-green" },
@@ -171,7 +204,7 @@ export default function PaperPage() {
                         </div>
 
                         <p className="text-[10px] text-muted mono">
-                          Opened: {p.open_ts ?? "–"} · Age: {p.age ?? 0} bars
+                          Opened: {open_ts} · {ageLabel}
                         </p>
                       </div>
                     );

@@ -140,17 +140,25 @@ export interface Signal {
   full_signal?:        string | null;
 }
 
+/** Bot stores entry_price/stop_loss/target/action; manual API uses entry/sl/tp/side/signal */
 export interface Position {
-  side:     string;
-  signal:   string;
-  entry:    number;
-  sl:       number;
-  tp:       number;
-  notional: number;
-  risk:     number;
-  age:      number;
-  open_ts:  string;
-  paper?:   boolean;
+  side?:     string;
+  signal?:   string;
+  entry?:    number;
+  sl?:       number;
+  tp?:       number;
+  notional?: number;
+  risk?:     number;
+  age?:      number;
+  open_ts?:  string;
+  paper?:    boolean;
+  /** Astro-bot paper_trade / live open position shape */
+  symbol?:      string;
+  action?:      string;
+  entry_price?: number;
+  stop_loss?:   number;
+  target?:      number;
+  opened_at?:   string;
 }
 
 export interface EquityState {
