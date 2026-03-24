@@ -19,6 +19,25 @@ function StatPill({ label, value, color }: { label: string; value: string; color
   );
 }
 
+function formatCloseReason(result?: string | null): string {
+  const r = (result || "").toUpperCase();
+  if (!r) return "Closed";
+  if (r === "OPPOSITE_SIGNAL") return "Closed by OPPOSITE";
+  if (r === "TIMEOUT") return "Closed by TIMEOUT";
+  if (r === "BOOK_PROFIT") return "Closed by BOOK_PROFIT";
+  if (r === "TP") return "Closed by TP";
+  if (r === "SL") return "Closed by SL";
+  return `Closed by ${r}`;
+}
+
+function closeReasonColor(result?: string | null): string {
+  const r = (result || "").toUpperCase();
+  if (r === "TP" || r === "BOOK_PROFIT") return "text-green";
+  if (r === "SL") return "text-red";
+  if (r === "OPPOSITE_SIGNAL" || r === "TIMEOUT") return "text-orange";
+  return "text-muted";
+}
+
 export default function PaperPage() {
   const [userId, setUserId] = useState("default");
 
@@ -182,9 +201,8 @@ export default function PaperPage() {
                           <span className={clsx("mono font-bold", pnl >= 0 ? "text-green" : "text-red")}>
                             {pnl >= 0 ? "+" : ""}{pnl.toFixed(2)}
                           </span>
-                          <span className={clsx("text-[10px] mono",
-                            t.result === "WIN" ? "text-green" : t.result?.startsWith("STOP") ? "text-red" : "text-orange")}>
-                            {t.result}
+                          <span className={clsx("text-[10px] mono", closeReasonColor(t.result))}>
+                            {formatCloseReason(t.result)}
                           </span>
                         </div>
                       </div>
