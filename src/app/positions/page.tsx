@@ -12,6 +12,42 @@ import { Clock, TrendingUp, TrendingDown, Filter } from "lucide-react";
 type Tab = "open" | "closed";
 type SideFilter = "all" | "BUY" | "SELL";
 
+function actionBgClass(action?: string | null): string {
+  const a = action ?? "";
+  return ACTION_BG[a] ?? "bg-surface2 text-muted border-border";
+}
+
+/** Bot KV uses entry_price / stop_loss / target / action */
+function openRow(p: Position) {
+  const entry = p.entry ?? p.entry_price ?? 0;
+  const sl = p.sl ?? p.stop_loss ?? 0;
+  const tp = p.tp ?? p.target ?? 0;
+  const notional = p.notional ?? 0;
+  const action = p.action ?? "";
+  const signal = p.signal ?? action;
+  let side = (p.side || "").toUpperCase();
+  if (!side && action.includes("BUY")) side = "BUY";
+  if (!side && action.includes("SELL")) side = "SELL";
+  const risk =
+    entry > 0 ? (Math.abs(entry - sl) / entry) * notional : (p.risk ?? 0);
+  const openedAt = p.opened_at ?? "";
+  const open_ts = p.open_ts ?? (openedAt ? openedAt.replace("T", " ").slice(0, 16) : "–");
+  let ageLabel: string;
+  if (typeof p.age === "number" && p.age > 0) {
+    ageLabel = `${p.age} bars`;
+  } else if (openedAt) {
+    try {
+      const h = (Date.now() - new Date(openedAt).getTime()) / 3_600_000;
+      ageLabel = h < 1 ? `${Math.round(h * 60)}m` : `${h.toFixed(1)}h`;
+    } catch {
+      ageLabel = "–";
+    }
+  } else {
+    ageLabel = "–";
+  }
+  return { entry, sl, tp, notional, side, signal, open_ts, ageLabel, risk, isLong: side === "BUY" };
+}
+
 function PnlBadge({ pnl }: { pnl: number | null }) {
   if (pnl === null) return <span className="text-muted mono">–</span>;
   return (
@@ -126,31 +162,34 @@ export default function PositionsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {openPos.map((p, i) => (
+                  {openPos.map((p, i) => {
+                    const row = openRow(p);
+                    return (
                     <tr key={i} className="border-b border-border/40 hover:bg-surface2 transition-colors">
                       <td className="px-4 py-3">
                         <span className={clsx(
                           "font-bold mono flex items-center gap-1",
-                          p.side === "BUY" ? "text-green" : "text-red"
+                          row.isLong ? "text-green" : "text-red"
                         )}>
-                          {p.side === "BUY" ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                          {p.side}
+                          {row.isLong ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                          {row.side}
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={clsx("px-2 py-0.5 rounded text-[10px] font-bold border", ACTION_BG[p.signal] ?? "bg-surface2 text-muted border-border")}>
-                          {p.signal}
+                        <span className={clsx("px-2 py-0.5 rounded text-[10px] font-bold border", actionBgClass(row.signal))}>
+                          {row.signal}
                         </span>
                       </td>
-                      <td className="px-4 py-3 mono text-blue font-semibold">${(p.entry ?? 0).toLocaleString()}</td>
-                      <td className="px-4 py-3 mono text-red">${(p.sl ?? 0).toLocaleString()}</td>
-                      <td className="px-4 py-3 mono text-green">${(p.tp ?? 0).toLocaleString()}</td>
-                      <td className="px-4 py-3 mono text-muted">${(p.notional ?? 0).toFixed(2)}</td>
-                      <td className="px-4 py-3 mono text-muted">${(p.risk ?? 0).toFixed(2)}</td>
-                      <td className="px-4 py-3 mono text-orange">{p.age ?? 0} bars</td>
-                      <td className="px-4 py-3 mono text-muted">{p.open_ts ?? "–"}</td>
+                      <td className="px-4 py-3 mono text-blue font-semibold">${row.entry.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                      <td className="px-4 py-3 mono text-red">${row.sl.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                      <td className="px-4 py-3 mono text-green">${row.tp.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                      <td className="px-4 py-3 mono text-muted">${row.notional.toFixed(2)}</td>
+                      <td className="px-4 py-3 mono text-muted">${row.risk.toFixed(2)}</td>
+                      <td className="px-4 py-3 mono text-orange">{row.ageLabel}</td>
+                      <td className="px-4 py-3 mono text-muted">{row.open_ts}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -178,7 +217,7 @@ export default function PositionsPage() {
                     <tr key={i} className="border-b border-border/40 hover:bg-surface2 transition-colors">
                       <td className="px-4 py-3 mono text-muted">{t.timestamp?.slice(0, 16).replace("T", " ")}</td>
                       <td className="px-4 py-3">
-                        <span className={clsx("px-2 py-0.5 rounded text-[10px] font-bold border", ACTION_BG[t.action] ?? "")}>
+                        <span className={clsx("px-2 py-0.5 rounded text-[10px] font-bold border", actionBgClass(t.action))}>
                           {t.action}
                         </span>
                       </td>

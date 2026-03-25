@@ -9,6 +9,8 @@ import clsx from "clsx";
 import {
   Terminal, TrendingUp, TrendingDown, BarChart2,
 } from "lucide-react";
+import FullSignalPanel from "@/components/signals/FullSignalPanel";
+import type { FullSignalPayload } from "@/lib/types";
 
 function StatPill({ label, value, color }: { label: string; value: string; color: string }) {
   return (
@@ -76,6 +78,7 @@ function normalizeOpenPosition(p: Position) {
 
 export default function PaperPage() {
   const [userId, setUserId] = useState("default");
+  const [selectedTrade, setSelectedTrade] = useState<Signal | null>(null);
 
   const { data: positions = [] } =
     useSWR<Position[]>(`/api/users/${userId}/positions`, fetcher, { refreshInterval: 15000 });
@@ -111,6 +114,15 @@ export default function PaperPage() {
     const notes = (s.notes || "").toLowerCase();
     return !notes.startsWith("skipped");
   });
+
+  const selectedPayload: FullSignalPayload | null = (() => {
+    if (!selectedTrade?.full_signal) return null;
+    try {
+      return JSON.parse(selectedTrade.full_signal) as FullSignalPayload;
+    } catch {
+      return null;
+    }
+  })();
 
   return (
     <>
@@ -223,7 +235,12 @@ export default function PaperPage() {
                   {trades.slice(0, 6).map((t, i) => {
                     const pnl = t.pnl ?? 0;
                     return (
-                      <div key={i} className="flex items-center justify-between bg-surface2 rounded-lg px-3 py-2.5 text-xs">
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setSelectedTrade(t)}
+                        className="w-full flex items-center justify-between bg-surface2 rounded-lg px-3 py-2.5 text-xs hover:bg-surface3 transition-colors text-left"
+                      >
                         <div className="flex items-center gap-2">
                           <span className={clsx("mono font-bold", t.action?.includes("BUY") ? "text-green" : "text-red")}>
                             {t.action?.includes("BUY") ? "▲" : "▼"} {t.action?.split("_")[0]}
@@ -238,7 +255,7 @@ export default function PaperPage() {
                             {formatCloseReason(t.result)}
                           </span>
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -247,6 +264,101 @@ export default function PaperPage() {
           </div>
         </div>
       </div>
+
+      {/* Trade details modal */}
+      {selectedTrade && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={() => setSelectedTrade(null)}
+        >
+          <div
+            className="w-full max-w-2xl rounded-xl overflow-hidden border border-border bg-surface"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-surface2">
+              <div className="space-y-0">
+                <div className="text-xs text-muted uppercase tracking-wider">
+                  Trade Detail
+                </div>
+                <div className="text-sm font-semibold mono">
+                  {selectedTrade.action ?? "—"}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedTrade(null)}
+                className="text-[11px] text-blue hover:underline"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* If full_signal exists, show the richer panel */}
+              <FullSignalPanel payload={selectedPayload} />
+
+              <div className="rounded-lg border border-border bg-surface2 p-3 space-y-2">
+                <div className="text-xs text-muted uppercase tracking-wider">Prices & Outcome</div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-surface rounded px-2 py-1">
+                    <div className="text-[10px] text-muted">Entry</div>
+                    <div className="mono font-semibold">
+                      ${selectedTrade.entry_price != null ? selectedTrade.entry_price.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "–"}
+                    </div>
+                  </div>
+                  <div className="bg-surface rounded px-2 py-1">
+                    <div className="text-[10px] text-muted">SL</div>
+                    <div className="mono font-semibold text-red">
+                      ${selectedTrade.stop_loss != null ? selectedTrade.stop_loss.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "–"}
+                    </div>
+                  </div>
+                  <div className="bg-surface rounded px-2 py-1">
+                    <div className="text-[10px] text-muted">TP</div>
+                    <div className="mono font-semibold text-green">
+                      ${selectedTrade.target != null ? selectedTrade.target.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "–"}
+                    </div>
+                  </div>
+                  <div className="bg-surface rounded px-2 py-1">
+                    <div className="text-[10px] text-muted">Close</div>
+                    <div className="mono font-semibold">
+                      ${selectedTrade.close_price != null ? selectedTrade.close_price.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "–"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-surface rounded px-2 py-1">
+                    <div className="text-[10px] text-muted">Notional</div>
+                    <div className="mono font-semibold">
+                      ${selectedTrade.position_size_usdt != null ? selectedTrade.position_size_usdt.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "–"}
+                    </div>
+                  </div>
+                  <div className="bg-surface rounded px-2 py-1">
+                    <div className="text-[10px] text-muted">P&amp;L</div>
+                    <div className={clsx("mono font-semibold", (selectedTrade.pnl ?? 0) >= 0 ? "text-green" : "text-red")}>
+                      {(selectedTrade.pnl ?? 0) >= 0 ? "+" : ""}{(selectedTrade.pnl ?? 0).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-xs">
+                  <div className="text-[10px] text-muted uppercase tracking-wider">Result</div>
+                  <div className={clsx("mono font-semibold", closeReasonColor(selectedTrade.result))}>
+                    {formatCloseReason(selectedTrade.result)}
+                  </div>
+                </div>
+
+                {selectedTrade.notes && (
+                  <div className="text-xs text-muted">
+                    <div className="text-[10px] text-muted uppercase tracking-wider">Notes</div>
+                    <div className="mono whitespace-pre-wrap">{selectedTrade.notes}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
